@@ -62,6 +62,34 @@ int pct_get_thread_priority() {
 void pct_markthread_done() {
     pthread_mutex_lock(&ptc_mutex);
         pthread_t key = pthread_self();
+        bool found = false;
+        for (int i = 0; i < pct_thread_map->meta.capacity; i++) {
+            if (!pct_thread_map->entries[i].filled || pct_thread_map->entries[i].dead) {
+                continue;
+            }
+
+            pthread_t entry_key = pct_thread_map->entries[i].key;
+            if (pthread_equal(entry_key, key)) {
+                found = true;
+                break;
+            }
+        }
+    
+        if (!found) {
+            for (int i = 0; i < pct_thread_map->meta.capacity; i++) {
+                if (!pct_thread_map->entries[i].filled || pct_thread_map->entries[i].dead) {
+                    continue;
+                }
+
+                pthread_t entry_key = pct_thread_map->entries[i].key;
+                if (pthread_equal(entry_key, key)) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+
+        ckg_assert(found);
         ckg_hashmap_pop(pct_thread_map, key); 
     pthread_mutex_unlock(&ptc_mutex);
 }
