@@ -25,12 +25,18 @@ basically I want the thread id to uniquely map to an array slot (I could use my 
     #include <semaphore.h>
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 void pct_init();
 void pct_shutdown();
 int pct_get_thread_priority();
 void pct_markthread_done();
-int pct_pthread_create(pthread_t* restrict thread_id, const pthread_attr_t *restrict attribute, void*(*func)(void*), void *restrict arg);
+int pct_pthread_create(pthread_t* thread_id, const pthread_attr_t* attribute, void*(*func)(void*), void* arg);
 int pct_pthread_mutex_lock(pthread_mutex_t* mutex);
+#ifdef __cplusplus
+}
+#endif
 
 #if !defined(PCT_BOOTSTRAP)
     #define pthread_create(thread_id, attribute, func, arg) pct_pthread_create(thread_id, attribute, func, arg)

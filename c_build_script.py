@@ -30,7 +30,7 @@ pc: ProjectConfig = ProjectConfig(
 if IS_WINDOWS() and not C_BUILD_IS_DEPENDENCY():
     cc.compiler_name = "cl"
 elif IS_DARWIN() and not C_BUILD_IS_DEPENDENCY():
-    cc.compiler_name = "clang"
+    cc.compiler_name = "clang++"
 elif IS_LINUX() and not C_BUILD_IS_DEPENDENCY():
     cc.compiler_name = "gcc"
 
@@ -42,7 +42,8 @@ else:
     cc.compiler_warning_level = "all"
     cc.compiler_disable_specific_warnings = [
         "deprecated", "parentheses", "unused-variable",
-        "int-to-void-pointer-cast", "void-pointer-to-int-cast"
+        "int-to-void-pointer-cast", "void-pointer-to-int-cast",
+        "reserved-user-defined-literal"
     ]
 
 build_postfix = f"build_{cc.compiler_name}/{C_BUILD_BUILD_TYPE()}"
@@ -56,7 +57,7 @@ procedures: Dict[str, ProcedureConfig] = {
     "pct library": ProcedureConfig(
         build_directory=f"./{build_postfix}",
         output_name="PCT.lib",
-        source_files=["../../Source/*.c"],
+        source_files=["../../Source/*.cpp"],
         additional_libs=[]
     ),
 

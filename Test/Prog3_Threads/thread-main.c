@@ -93,8 +93,8 @@ void evenOddSort(int* x, int n) {
     done_count[EVEN] = 0;
     done_count[ODD] = 0;
 
-    pthread_t* threads = malloc(sizeof(pthread_t) * total_thread_count);
-    ThreadData* data = malloc(sizeof(ThreadData) * total_thread_count);
+    pthread_t* threads = (pthread_t*)malloc(sizeof(pthread_t) * total_thread_count);
+    ThreadData* data = (ThreadData*)(sizeof(ThreadData) * total_thread_count);
     
     for (int i = 0; i < total_thread_count; i++) {
         data[i].swap_address_1 = &x[i];
@@ -168,7 +168,7 @@ int main() {
         return -1;
     }
 
-    int* x = malloc(sizeof(int) * n);
+    int* x = (int*)malloc(sizeof(int) * n);
     for (int i = 0; i < n; i++) {
         success = scanf("%d", &x[i]);
         if (success == EOF) {

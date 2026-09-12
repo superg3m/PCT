@@ -21,7 +21,7 @@ int next = 0;
 int baby_id;
 
 char* generate_space_for_baby(int id) {
-	char* ret = malloc((sizeof(char) * id) + 1);
+	char* ret = (char*)malloc((sizeof(char) * id) + 1);
 	for (int i = 0; i < id; i++) {
 		ret[i] = ' ';
 	}

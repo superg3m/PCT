@@ -88,8 +88,8 @@ int even_odd_sort(int* x, int total_count) {
     bool swapped = true;
     
     int thread_count = total_count / 2;
-    pthread_t* threads = malloc(sizeof(pthread_t) * thread_count);
-    ThreadData* data = malloc(sizeof(ThreadData) * thread_count);
+    pthread_t* threads = (pthread_t*)malloc(sizeof(pthread_t) * thread_count);
+    ThreadData* data = (ThreadData*)malloc(sizeof(ThreadData) * thread_count);
 
     int iteration = 1;
     while (swapped) {
@@ -123,7 +123,7 @@ int main() {
         return -1;
     }
 
-    int* x = malloc(sizeof(int) * n);
+    int* x = (int*)malloc(sizeof(int) * n);
     for (int i = 0; i < n; i++) {
         success = scanf("%d", &x[i]);
         if (success == EOF) {
