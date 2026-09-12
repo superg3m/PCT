@@ -14,6 +14,7 @@ pthread_mutex_t write_mutex;
 
 // ./prog4 8 15 12
 int main(int argc, char** argv) {
+	pthread_mutex_init(&write_mutex, NULL);
 	if (argc < 4) {
 		ERR("Usage: ./prog4 m n t\n");
 		return -1;
@@ -24,18 +25,10 @@ int main(int argc, char** argv) {
 	data.baby_eagle_count = atoi(argv[2]);
 	data.max_refill_count = atoi(argv[3]);
 	data.baby_started_count = 0;
-
-	pct_init();
-	
-	pthread_mutex_init(&write_mutex, NULL);
 	pthread_mutex_init(&data.mutex, NULL);
-
-	OUT("MAIN: There are %d baby eagles, %d feeding pots, and %d feedings\n", data.baby_eagle_count, data.foodpot_count, data.max_refill_count);
-	OUT("MAIN: Game starts!!!!!\n");
-
 	sem_init(&data.wake_mom, 0, 0);
 	sem_init(&data.wake_main, 0, 0);
-	
+
 	data.food = (bool*)malloc(sizeof(bool) * data.foodpot_count);
 	data.foodpot = (sem_t*)malloc(sizeof(sem_t) * data.foodpot_count);
 	data.food_sems = (sem_t*)malloc(sizeof(sem_t) * data.foodpot_count);
@@ -45,6 +38,11 @@ int main(int argc, char** argv) {
 		data.food[i] = false;
 	}
 
+	pct_init();
+	OUT("JUST TESTING\n");
+	OUT("MAIN: There are %d baby eagles, %d feeding pots, and %d feedings\n", data.baby_eagle_count, data.foodpot_count, data.max_refill_count);
+	OUT("MAIN: Game starts!!!!!\n");
+	
 	pthread_t* baby_thread_ids = (pthread_t*)malloc(sizeof(pthread_t) * data.baby_eagle_count);
 	BabyThreadData* baby_data = (BabyThreadData*)malloc(sizeof(BabyThreadData) * data.baby_eagle_count);
 	for (int i = 0; i < data.baby_eagle_count; i++) {

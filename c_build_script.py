@@ -52,41 +52,47 @@ if IS_WINDOWS():
     windows_libs = [GET_LIB_FLAG(cc, "User32"), GET_LIB_FLAG(cc, "Gdi32")]
     executable_procedure_libs += windows_libs
 
+inject = ["-O0"]
 
 procedures: Dict[str, ProcedureConfig] = {
     "pct library": ProcedureConfig(
         build_directory=f"./{build_postfix}",
         output_name="PCT.lib",
         source_files=["../../Source/*.cpp"],
-        additional_libs=[]
+        additional_libs=[],
+        compiler_inject_into_args=inject
     ),
 
     "print thread": ProcedureConfig(
         build_directory=f"./Test/PrintThread/{build_postfix}",
         output_name="print_thread.exe",
         source_files=["../../*.c"],
-        additional_libs=executable_procedure_libs
+        additional_libs=executable_procedure_libs,
+        compiler_inject_into_args=inject
     ),
 
     "prog3": ProcedureConfig(
         build_directory=f"./Test/Prog3/{build_postfix}",
         output_name="prog3.exe",
         source_files=["../../*.c"],
-        additional_libs=executable_procedure_libs
+        additional_libs=executable_procedure_libs,
+        compiler_inject_into_args=inject
     ),
 
     "prog3 threads": ProcedureConfig(
         build_directory=f"./Test/Prog3_Threads/{build_postfix}",
         output_name="prog3_threads.exe",
         source_files=["../../*.c"],
-        additional_libs=executable_procedure_libs
+        additional_libs=executable_procedure_libs,
+        compiler_inject_into_args=inject
     ),
 
     "prog4": ProcedureConfig(
         build_directory=f"./Test/Prog4/{build_postfix}",
         output_name="prog4.exe",
         source_files=["../../*.c"],
-        additional_libs=executable_procedure_libs
+        additional_libs=executable_procedure_libs,
+        compiler_inject_into_args=["-O0"]
     ),
 }
 

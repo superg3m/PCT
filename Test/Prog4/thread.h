@@ -9,7 +9,7 @@
 // #include <pthread.h>
 #include "../../Source/pct.h"
 
-extern pthread_mutex_t  write_mutex;
+extern pthread_mutex_t write_mutex;
 
 #define ArrayCount(arr) (sizeof(arr) / sizeof(arr[0]))
 #define BUFFER_SIZE 0x800

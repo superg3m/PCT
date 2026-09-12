@@ -126,6 +126,7 @@ void finish_eating(BabyThreadData* baby_data, int index) {
 		// and the food is not available then you know you can safely just bale out.
 		if ((baby_data->data->food[index] == false) && (refill_count >= baby_data->data->max_refill_count)) {
 			pthread_mutex_unlock(&baby_data->data->mutex);
+			sem_post(&baby_data->data->foodpot[index]);
 			pthread_exit(0);
 		} else {
 			pthread_mutex_unlock(&baby_data->data->mutex);

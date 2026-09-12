@@ -2,20 +2,16 @@
 #include "pct.h"
 
 #if defined(__APPLE__) || defined(__MACH__)
-    #define sem_wait(s) dispatch_semaphore_wait(*s, DISPATCH_TIME_FOREVER);
-#else
-    #include <semaphore.h>
+    #define sem_wait(s) dispatch_semaphore_wait(*(s), DISPATCH_TIME_FOREVER)
+    #define sem_post(s) dispatch_semaphore_signal(*(s))
 #endif
 
-
-
 #include <unordered_map>
-
 typedef struct ThreadContext {
     int priority;
     int generation;
     volatile bool running;
-    sem_t semaphore;
+    sem_t* semaphore;
 } ThreadContext;
 
 volatile bool pct_done = false;
@@ -56,12 +52,10 @@ void pct_shutdown() {
 }
 
 int pct_get_thread_priority() {
-    int ret = -1;
     pthread_t key = pthread_self();
     pthread_mutex_lock(&ptc_mutex);
-        if (pct_thread_map.count(key)) {
-            ret = pct_thread_map[key].priority;
-        }
+        bool tracked = pct_thread_map.count(key);
+        int ret = tracked ? pct_thread_map[key].priority : -1;
     pthread_mutex_unlock(&ptc_mutex);
 
     return ret;
@@ -78,8 +72,9 @@ int pct_pthread_create(pthread_t* thread_id, const pthread_attr_t* attr, void*(*
     ThreadContext ctx = {0};
     ctx.generation = 0;
     ctx.running = true;
-    ctx.priority = random_range(0, 50);
-    sem_init(&ctx.semaphore, 0, 0);
+    ctx.priority = random_range(1, 50);
+    ctx.semaphore = (sem_t*)malloc(sizeof(sem_t));
+    sem_init(ctx.semaphore, 0, 0);
 
     pthread_mutex_lock(&ptc_mutex);
         pthread_create(thread_id, NULL, func, arg);
@@ -92,43 +87,53 @@ int pct_pthread_create(pthread_t* thread_id, const pthread_attr_t* attr, void*(*
 int pct_pthread_mutex_lock(pthread_mutex_t* mutex) {
     pthread_t key = pthread_self();
     pthread_mutex_lock(&ptc_mutex);
-    if (pct_thread_map.count(key)) {
-        pct_thread_map[key].running = false;
-        // NOTE(Jovanni): I need to cache this because once i'm outside of this mutex
-        // its possible that I grow the hashmap while trying to access it thats dangerous.
-        sem_t sem = pct_thread_map.at(key).semaphore;
-        pthread_mutex_unlock(&ptc_mutex);
-        sem_wait(&sem); // NOTE(Jovanni): wait to be signaled by scheduler
-    } else {
-        pthread_mutex_unlock(&ptc_mutex);
-    }
+        bool tracked = pct_thread_map.count(key);
+        if (tracked) pct_thread_map[key].running = false;
+        sem_t* sem = tracked ? pct_thread_map.at(key).semaphore : NULL;
+    pthread_mutex_unlock(&ptc_mutex);
 
+    if (tracked) sem_wait(sem); // NOTE(Jovanni): wait for scheduler
     return pthread_mutex_lock(mutex);
+}
+
+int pct_pthread_mutex_unlock(pthread_mutex_t* mutex) {
+    pthread_t key = pthread_self();
+    pthread_mutex_lock(&ptc_mutex);
+        bool tracked = pct_thread_map.count(key);
+        if (tracked) pct_thread_map[key].running = false;
+        sem_t* sem = tracked ? pct_thread_map.at(key).semaphore : NULL;
+    pthread_mutex_unlock(&ptc_mutex);
+
+    if (tracked) sem_wait(sem); // NOTE(Jovanni): wait for scheduler
+    return pthread_mutex_unlock(mutex);
 }
 
 int pct_sem_wait(sem_t* s) {
     pthread_t key = pthread_self();
     pthread_mutex_lock(&ptc_mutex);
-    if (pct_thread_map.count(key)) {
-        pct_thread_map[key].running = false;
-        // NOTE(Jovanni): I need to cache this because once i'm outside of this mutex
-        // its possible that I grow the hashmap while trying to access it thats dangerous.
-        sem_t sem = pct_thread_map.at(key).semaphore;
-        pthread_mutex_unlock(&ptc_mutex);
-        sem_wait(&sem); // NOTE(Jovanni): wait to be signaled by scheduler
-    } else {
-        pthread_mutex_unlock(&ptc_mutex);
-    }
-
+        bool tracked = pct_thread_map.count(key);
+        if (tracked) pct_thread_map[key].running = false;
+        sem_t* sem = tracked ? pct_thread_map.at(key).semaphore : NULL;
+    pthread_mutex_unlock(&ptc_mutex);
+       
+    if (tracked) sem_wait(sem); // NOTE(Jovanni): wait for scheduler
     return sem_wait(s);
 }
 
 int pct_sem_post(sem_t* s) {
+    pthread_t key = pthread_self();
+    pthread_mutex_lock(&ptc_mutex);
+        bool tracked = pct_thread_map.count(key);
+        if (tracked) pct_thread_map[key].running = false;
+        sem_t* sem = tracked ? pct_thread_map.at(key).semaphore : NULL;
+    pthread_mutex_unlock(&ptc_mutex);
+       
+    if (tracked) sem_wait(sem); // NOTE(Jovanni): wait for scheduler
     return sem_post(s);
 }
 
 #define PCT_GENERATION 0
-#define PCT_WAIT_AND_SYNC 0
+#define PCT_WAIT_AND_SYNC 1
 // NOTE(Jovanni): This is the main engine of hte scheduler, not sure if it should be join or not tbh
 void* pct_scheduling_thread(void* arg) {
     while (!pct_done) {
@@ -145,7 +150,7 @@ void* pct_scheduling_thread(void* arg) {
 
                 if (!ctx) {
                     found = true;
-                    ctx = &pct_thread_map[key];
+                    ctx = &pct_thread_map.at(key);
                 }
 
                 bool generation_is_less = value.generation < ctx->generation;
@@ -165,12 +170,14 @@ void* pct_scheduling_thread(void* arg) {
                 #endif
             }
 
-            if (found && (PCT_WAIT_AND_SYNC ? running_count == 0 : true)) {
-                ctx->running = true;
-                ctx->generation += 1;
-                sem_post(&ctx->semaphore);
-            }
-        pthread_mutex_unlock(&ptc_mutex);
+        if (found && (PCT_WAIT_AND_SYNC ? running_count == 0 : true)) {
+            ctx->running = true;
+            ctx->generation += 1;
+            pthread_mutex_unlock(&ptc_mutex);
+            sem_post(ctx->semaphore);
+        } else {
+            pthread_mutex_unlock(&ptc_mutex);
+        }
     }
 
     return 0;
