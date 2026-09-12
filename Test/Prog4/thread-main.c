@@ -69,8 +69,8 @@ int main(int argc, char** argv) {
 	sem_destroy(&data.wake_mom);
 	sem_destroy(&data.wake_main);
 	for (int i = 0; i < data.foodpot_count; i++) {
-		sem_destroy(&data.foodpot[i]);
-		sem_destroy(&data.food_sems[i]);
+		//sem_destroy(&data.foodpot[i]);
+		//sem_destroy(&data.food_sems[i]);
 	}
 
 	free(data.food);
