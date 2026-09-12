@@ -2,3 +2,4 @@
 *.exe
 .vscode/
 build_clang/
+c_build/
