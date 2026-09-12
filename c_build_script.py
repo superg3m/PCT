@@ -41,22 +41,52 @@ if cc.compiler_name == "cl":
 else:
     cc.compiler_warning_level = "all"
     cc.compiler_disable_specific_warnings = [
-        "deprecated", "parentheses", "unused-variable"
+        "deprecated", "parentheses", "unused-variable",
+        "int-to-void-pointer-cast", "void-pointer-to-int-cast"
     ]
 
-executable_procedure_libs = []
+build_postfix = f"build_{cc.compiler_name}/{C_BUILD_BUILD_TYPE()}"
+executable_procedure_libs = [f"../../../../{build_postfix}/PCT.lib"]
 if IS_WINDOWS():
     windows_libs = [GET_LIB_FLAG(cc, "User32"), GET_LIB_FLAG(cc, "Gdi32")]
     executable_procedure_libs += windows_libs
 
-build_postfix = f"build_{cc.compiler_name}/{C_BUILD_BUILD_TYPE()}"
+
 procedures: Dict[str, ProcedureConfig] = {
-    "project_exe": ProcedureConfig(
+    "pct library": ProcedureConfig(
         build_directory=f"./{build_postfix}",
-        output_name="pct_test.exe",
+        output_name="PCT.lib",
         source_files=["../../Source/*.c"],
+        additional_libs=[]
+    ),
+
+    "print thread": ProcedureConfig(
+        build_directory=f"./Test/PrintThread/{build_postfix}",
+        output_name="print_thread.exe",
+        source_files=["../../*.c"],
         additional_libs=executable_procedure_libs
-    )
+    ),
+
+    "prog3": ProcedureConfig(
+        build_directory=f"./Test/Prog3/{build_postfix}",
+        output_name="prog3.exe",
+        source_files=["../../*.c"],
+        additional_libs=executable_procedure_libs
+    ),
+
+    "prog3 threads": ProcedureConfig(
+        build_directory=f"./Test/Prog3_Threads/{build_postfix}",
+        output_name="prog3_threads.exe",
+        source_files=["../../*.c"],
+        additional_libs=executable_procedure_libs
+    ),
+
+    "prog4": ProcedureConfig(
+        build_directory=f"./Test/Prog4/{build_postfix}",
+        output_name="prog4.exe",
+        source_files=["../../*.c"],
+        additional_libs=executable_procedure_libs
+    ),
 }
 
 manager: Manager = Manager(cc, pc, procedures)

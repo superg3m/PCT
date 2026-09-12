@@ -1,7 +1,8 @@
-#include "pct.h"
+#include "../../Source/pct.h"
 #include <stdlib.h>
 #include <stdio.h>
 
+#define pct_thread_count 4
 pthread_mutex_t print_mutex;
 
 void* print_thread(void* arg) {
@@ -15,7 +16,6 @@ void* print_thread(void* arg) {
     return 0;
 }
 
-#define pct_thread_count 4
 int main() {
     pct_init();
 

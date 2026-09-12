@@ -62,7 +62,7 @@ int pct_get_thread_priority() {
 void pct_markthread_done() {
     pthread_mutex_lock(&ptc_mutex);
         pthread_t key = pthread_self();
-        ckg_hashmap_pop(pct_thread_map, key);
+        ckg_hashmap_pop(pct_thread_map, key); 
     pthread_mutex_unlock(&ptc_mutex);
 }
 
@@ -92,7 +92,7 @@ int pct_pthread_mutex_lock(pthread_mutex_t* mutex) {
         ThreadContext ctx = *temp;
     pthread_mutex_unlock(&ptc_mutex);
 
-    sem_wait(ctx.semaphore); // NOTE(Jovanni): wait to be signaled by main thread
+    sem_wait(&ctx.semaphore); // NOTE(Jovanni): wait to be signaled by main thread
     return pthread_mutex_lock(mutex);
 }
 
@@ -139,7 +139,7 @@ void* pct_scheduling_thread(void* arg) {
             if (ctx && (PCT_WAIT_AND_SYNC ? running_count == 0 : true)) {
                 ctx->running = true;
                 ctx->generation += 1;
-                sem_signal(ctx->semaphore);
+                sem_post(&ctx->semaphore);
             }
         pthread_mutex_unlock(&ptc_mutex);
     }

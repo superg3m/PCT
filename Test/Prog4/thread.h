@@ -1,13 +1,13 @@
 #pragma once
 
-#include <semaphore.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
 #include <assert.h>
-#include <pthread.h>
+// #include <pthread.h>
+#include "../../Source/pct.h"
 
 extern pthread_mutex_t  write_mutex;
 

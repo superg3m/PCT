@@ -18,9 +18,9 @@ basically I want the thread id to uniquely map to an array slot (I could use my 
     #include <dispatch/dispatch.h>
     #define sem_t dispatch_semaphore_t
     #define sem_init(s, pshared, value) (*s = dispatch_semaphore_create(value), (int)(*s != NULL))
-    #define sem_wait(s) dispatch_semaphore_wait(s, DISPATCH_TIME_FOREVER);
-    #define sem_signal(s) dispatch_semaphore_signal(s);
-    #define sem_close(s) dispatch_release(s)
+    #define sem_wait(s) dispatch_semaphore_wait(*s, DISPATCH_TIME_FOREVER);
+    #define sem_post(s) dispatch_semaphore_signal(*s);
+    #define sem_destroy(s) dispatch_release(*s)
 #else
     #include <semaphore.h>
 #endif
