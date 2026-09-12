@@ -1,6 +1,6 @@
 #define PCT_BOOTSTRAP
 #include "pct.h"
-#include <map>
+#include <unordered_map>
 
 typedef struct ThreadContext {
     int priority;
@@ -11,6 +11,7 @@ typedef struct ThreadContext {
 
 volatile bool pct_done = false;
 pthread_mutex_t ptc_mutex;
+sem_t ptc_waiting_sem;
 pthread_t pct_scheduling_thread_id;
 
 struct pct_pthread_equal {
@@ -19,7 +20,13 @@ struct pct_pthread_equal {
     }
 };
 
-std::map<pthread_t, ThreadContext, pct_pthread_equal> pct_thread_map = {};
+struct pct_pthread_hash {
+    size_t operator()(pthread_t thread) const {
+        return 0;
+    }
+};
+
+std::unordered_map<pthread_t, ThreadContext, pct_pthread_hash, pct_pthread_equal> pct_thread_map = {};
 
 void* pct_scheduling_thread(void* arg);
 int random_range(int min, int max) {
@@ -29,6 +36,7 @@ int random_range(int min, int max) {
 void pct_init() {
     srand(100);
     pthread_mutex_init(&ptc_mutex, NULL);
+    sem_init(&ptc_waiting_sem, 0, 0);
     pthread_create(&pct_scheduling_thread_id, NULL, pct_scheduling_thread, NULL);
 }
 
@@ -42,8 +50,16 @@ void pct_shutdown() {
 
 int pct_get_thread_priority() {
     int ret = -1;
+    pthread_t key = pthread_self();
     pthread_mutex_lock(&ptc_mutex);
-        pthread_t key = pthread_self();
+    if (!pct_thread_map.count(key)) {
+        pthread_mutex_unlock(&ptc_mutex);
+        sem_wait(&ptc_waiting_sem);
+    } else {
+        pthread_mutex_unlock(&ptc_mutex);
+    }
+
+    pthread_mutex_lock(&ptc_mutex);
         ret = pct_thread_map[key].priority;
     pthread_mutex_unlock(&ptc_mutex);
 
@@ -67,22 +83,29 @@ int pct_pthread_create(pthread_t* thread_id, const pthread_attr_t* attr, void*(*
     pthread_mutex_lock(&ptc_mutex);
         pthread_create(thread_id, NULL, func, arg);
         pct_thread_map[*thread_id] = ctx;
+        sem_post(&ptc_waiting_sem)
     pthread_mutex_unlock(&ptc_mutex);
     
     return 0;
 }
 
 int pct_pthread_mutex_lock(pthread_mutex_t* mutex) {
+    pthread_t key = pthread_self();
     pthread_mutex_lock(&ptc_mutex);
-        pthread_t key = pthread_self();
-        pct_thread_map[key].running = false;
+    if (!pct_thread_map.count(key)) {
+        pthread_mutex_unlock(&ptc_mutex);
+        sem_wait(&ptc_waiting_sem);
+        pthread_mutex_lock(&ptc_mutex);
+    }
 
-        // NOTE(Jovanni): I need to cache this because once i'm outside of this mutex
-        // its possible that I grow the hashmap and ctx is invalid
-        ThreadContext ctx = pct_thread_map[key];
+    pct_thread_map[key].running = false;
+
+    // NOTE(Jovanni): I need to cache this because once i'm outside of this mutex
+    // its possible that I grow the hashmap while trying to access it thats dangerous.
+    sem_t sem = pct_thread_map.at(key).semaphore;
     pthread_mutex_unlock(&ptc_mutex);
+    sem_wait(&sem); // NOTE(Jovanni): wait to be signaled by main thread
 
-    sem_wait(&ctx.semaphore); // NOTE(Jovanni): wait to be signaled by main thread
     return pthread_mutex_lock(mutex);
 }
 
