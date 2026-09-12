@@ -29,10 +29,10 @@ void pct_init();
 void pct_shutdown();
 int pct_get_thread_priority();
 void pct_markthread_done();
-int pct_pthread_create(pthread_t* restrict thread_id, const pthread_attr_t *restrict attribute, void*(*func)(void*), void *restrict arg, int prio);
+int pct_pthread_create(pthread_t* restrict thread_id, const pthread_attr_t *restrict attribute, void*(*func)(void*), void *restrict arg);
 int pct_pthread_mutex_lock(pthread_mutex_t* mutex);
 
 #if !defined(PCT_BOOTSTRAP)
-    #define pthread_create(thread_id, attribute, func, arg, temp_prio) pct_pthread_create(thread_id, attribute, func, arg, temp_prio)
+    #define pthread_create(thread_id, attribute, func, arg) pct_pthread_create(thread_id, attribute, func, arg)
     #define pthread_mutex_lock(mutex) pct_pthread_mutex_lock(mutex)
 #endif
