@@ -515,6 +515,7 @@
         
         bool ckg_hashmap_has_helper(void* map);
         void ckg_hashmap_get_helper(void* map);
+        void* ckg_hashmap_get_pointer_helper(void* map);
         void ckg_hashmap_put_helper(void* map);
         void ckg_hashmap_pop_helper(void* map);
 
@@ -2291,7 +2292,7 @@
         void* ckg_hashmap_get_pointer_helper(void* map) {
             HashMapContext context = ckg_hashmap_get_context(map);
             ckg_assert_msg(*(bool*)(context.entry_filled_address), "The key doesn't exist in the hashmap!\n");
-            return context.entry;
+            return context.entry_value_address;
         }
 
         void ckg_hashmap_put_helper(void* map) {
