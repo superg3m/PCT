@@ -97,14 +97,6 @@ int pct_pthread_mutex_lock(pthread_mutex_t* mutex) {
 }
 
 int pct_pthread_mutex_unlock(pthread_mutex_t* mutex) {
-    pthread_t key = pthread_self();
-    pthread_mutex_lock(&ptc_mutex);
-        bool tracked = pct_thread_map.count(key);
-        if (tracked) pct_thread_map[key].running = false;
-        sem_t* sem = tracked ? pct_thread_map.at(key).semaphore : NULL;
-    pthread_mutex_unlock(&ptc_mutex);
-
-    if (tracked) sem_wait(sem); // NOTE(Jovanni): wait for scheduler
     return pthread_mutex_unlock(mutex);
 }
 
@@ -121,19 +113,11 @@ int pct_sem_wait(sem_t* s) {
 }
 
 int pct_sem_post(sem_t* s) {
-    pthread_t key = pthread_self();
-    pthread_mutex_lock(&ptc_mutex);
-        bool tracked = pct_thread_map.count(key);
-        if (tracked) pct_thread_map[key].running = false;
-        sem_t* sem = tracked ? pct_thread_map.at(key).semaphore : NULL;
-    pthread_mutex_unlock(&ptc_mutex);
-       
-    if (tracked) sem_wait(sem); // NOTE(Jovanni): wait for scheduler
     return sem_post(s);
 }
 
 #define PCT_GENERATION 0
-#define PCT_WAIT_AND_SYNC 1
+#define PCT_WAIT_AND_SYNC 0
 // NOTE(Jovanni): This is the main engine of hte scheduler, not sure if it should be join or not tbh
 void* pct_scheduling_thread(void* arg) {
     while (!pct_done) {
