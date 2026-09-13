@@ -6,7 +6,7 @@
 pthread_mutex_t print_mutex;
 
 void* print_thread(void* arg) {
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         pthread_mutex_lock(&print_mutex);
             printf("LOOP# %d | Thread Priority: %d\n", i, pct_get_thread_priority());
         pthread_mutex_unlock(&print_mutex);
