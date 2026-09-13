@@ -43,7 +43,7 @@ else:
     cc.compiler_disable_specific_warnings = [
         "deprecated", "parentheses", "unused-variable",
         "int-to-void-pointer-cast", "void-pointer-to-int-cast",
-        "reserved-user-defined-literal"
+        "reserved-user-defined-literal", "unused-but-set-variable"
     ]
 
 build_postfix = f"build_{cc.compiler_name}/{C_BUILD_BUILD_TYPE()}"

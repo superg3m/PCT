@@ -39,7 +39,6 @@ int main(int argc, char** argv) {
 	}
 
 	pct_init();
-	OUT("JUST TESTING\n");
 	OUT("MAIN: There are %d baby eagles, %d feeding pots, and %d feedings\n", data.baby_eagle_count, data.foodpot_count, data.max_refill_count);
 	OUT("MAIN: Game starts!!!!!\n");
 	
