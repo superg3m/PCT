@@ -14,6 +14,7 @@ pthread_mutex_t write_mutex;
 
 // ./prog4 8 15 12
 int main(int argc, char** argv) {
+	pct_init();
 	pthread_mutex_init(&write_mutex, NULL);
 	if (argc < 4) {
 		ERR("Usage: ./prog4 m n t\n");
@@ -38,7 +39,6 @@ int main(int argc, char** argv) {
 		data.food[i] = false;
 	}
 
-	pct_init();
 	OUT("MAIN: There are %d baby eagles, %d feeding pots, and %d feedings\n", data.baby_eagle_count, data.foodpot_count, data.max_refill_count);
 	OUT("MAIN: Game starts!!!!!\n");
 	
