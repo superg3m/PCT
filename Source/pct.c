@@ -68,6 +68,7 @@ void pct_init() {
     CJ_Arena* arena = cj_arena_create(0);
     JSON* root = cj_parse(arena, (char*)data);
 
+    // TODO(Jovanni): This is a much nicer API in my c++ library maybe, finish cj.
     for (int i = 0; i < cj_vector_count(root->cj_json.key_value_pair_vector); i++) {
         char* key = root->cj_json.key_value_pair_vector[i].key;
         JSON* value = root->cj_json.key_value_pair_vector[i].value;
