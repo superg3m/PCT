@@ -36,7 +36,15 @@ struct PThreadKey {
     }
 };
 
+typedef enum WaitingBehavior {
+    PCT_WAIT_NONE = 0,
+    PCT_WAIT_STRICT = 1,
+    PCT_WAIT_NO_RUNNING = 2
+} WaitingBehavior;
 
+int PCT_GENERATION = 0;
+int PCT_RANDOM_PRIORITY = 0;
+WaitingBehavior PCT_WAIT_AND_SYNC = PCT_WAIT_STRICT;
 Hashmap<PThreadKey, ThreadContext> pct_thread_map = {};
 
 void* pct_scheduling_thread(void* arg);
@@ -46,6 +54,24 @@ int random_range(int min, int max) {
 
 void pct_init() {
     srand(time(NULL));
+
+    Allocator allocator = allocator_general();
+
+    Error err = Error::SUCCESS;
+    size_t file_size = 0;
+    u8* data = platform_read_entire_file(allocator, "../../../../pct.json", file_size, err);
+    if (err != Error::SUCCESS) {
+        RUNTIME_ASSERT_MSG(false, "Error initializing pct | %s\n", error_get_string(err));
+        return;
+    }
+    
+    JSON* root = JSON::Parse(allocator_general(), (char*)data, file_size);
+    PCT_GENERATION = root->get<int>("PCT_GENERATION");
+    PCT_RANDOM_PRIORITY = root->get<int>("PCT_RANDOM_PRIORITY");
+    PCT_WAIT_AND_SYNC = (WaitingBehavior)root->get<int>("PCT_WAIT_AND_SYNC");
+
+    // TODO(Jovanni): Fix the arean so you can just free all of this garbage, instead of pointer chasing
+
     pct_thread_map = hashmap_create<PThreadKey, ThreadContext>(allocator_general());
     pthread_mutex_init(&ptc_mutex, NULL);
     pthread_create(&pct_scheduling_thread_id, NULL, pct_scheduling_thread, NULL);
@@ -137,14 +163,7 @@ int pct_sem_post(sem_t* s) {
     return sem_post(s);
 }
 
-#define PCT_WAIT_NONE 0
-#define PCT_WAIT_STRICT 1
-#define PCT_WAIT_NO_RUNNING 2
-
-#define PCT_GENERATION 1
-#define PCT_RANDOM_PRIORITY 0
-#define PCT_WAIT_AND_SYNC PCT_WAIT_NO_RUNNING
-// NOTE(Jovanni): This is the main engine of hte scheduler, not sure if it should be join or not tbh
+// NOTE(Jovanni): This is the main engine of the scheduler, not sure if it should be join or not tbh
 void* pct_scheduling_thread(void* arg) {
     while (!pct_done) {
         // TODO(Jovanni): [SLOW] I can replace this later with a heap data structure, or just sort or whatever
@@ -179,24 +198,25 @@ void* pct_scheduling_thread(void* arg) {
                 bool generation_is_equal = value->generation == ctx->generation;
                 bool priority_is_higher = !PCT_RANDOM_PRIORITY ? value->priority > ctx->priority : true; 
 
-                #if PCT_GENERATION
+                if (PCT_GENERATION) {
                     if (generation_is_less || generation_is_equal && priority_is_higher) {
                         ctx = value;
                     }
-                #else
+                } else {
                     if (priority_is_higher) {
                         ctx = value;
                     }
-                #endif
+                }
             }
 
-            #if PCT_WAIT_AND_SYNC == PCT_WAIT_NONE
-                bool wait_and_sync = true;
-            #elif PCT_WAIT_AND_SYNC == PCT_WAIT_STRICT
-                bool wait_and_sync = waiting == pct_thread_map.count;
-            #elif PCT_WAIT_AND_SYNC == PCT_WAIT_NO_RUNNING
-                bool wait_and_sync = running == 0;
-            #endif
+            bool wait_and_sync = false;
+            if (PCT_WAIT_AND_SYNC == PCT_WAIT_NONE) {
+                wait_and_sync = true;
+            } else if (PCT_WAIT_AND_SYNC == PCT_WAIT_STRICT) {
+                wait_and_sync = waiting == pct_thread_map.count;
+            } else if (PCT_WAIT_AND_SYNC == PCT_WAIT_NO_RUNNING) {
+                wait_and_sync = running == 0;
+            }
 
         if (ctx && wait_and_sync) {
             ctx->execution_state = PCT_THREAD_READY;

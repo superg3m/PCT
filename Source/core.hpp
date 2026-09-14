@@ -1777,6 +1777,16 @@
         JSON_VALUE_NULL
     };
 
+    static const char* json_vaule_type_names[] = {
+        STRINGIFY(JSON_VALUE_INT),
+        STRINGIFY(JSON_VALUE_FLOAT),
+        STRINGIFY(JSON_VALUE_STRING),
+        STRINGIFY(JSON_VALUE_OBJECT),
+        STRINGIFY(JSON_VALUE_ARRAY),
+        STRINGIFY(JSON_VALUE_BOOL),
+        STRINGIFY(JSON_VALUE_NULL)
+    };
+
     struct JSON;
 
     struct JsonValueObject {
@@ -1835,29 +1845,31 @@
             u64 index = hashmap_get(&this->object.keys, key);
             JSON* value = this->object.pairs[index].value;
 
+            const char* error_msg = "Error JSON.Get(%s) | Expected type %s, but got %s\n";
             if constexpr (std::is_same_v<T, int>) {
-                RUNTIME_ASSERT(value->type == JsonValueType::JSON_VALUE_INT);
+                RUNTIME_ASSERT_MSG(value->type == JsonValueType::JSON_VALUE_INT, error_msg, key, json_vaule_type_names[JsonValueType::JSON_VALUE_INT], json_vaule_type_names[value->type]);
                 return value->integer;
             } else if constexpr (std::is_same_v<T, float>) {
-                RUNTIME_ASSERT(value->type == JsonValueType::JSON_VALUE_FLOAT);
+                RUNTIME_ASSERT_MSG(value->type == JsonValueType::JSON_VALUE_FLOAT, error_msg, key, json_vaule_type_names[JsonValueType::JSON_VALUE_FLOAT], json_vaule_type_names[value->type]);
                 return value->floating;
             } else if constexpr (std::is_same_v<T, double>) {
-                RUNTIME_ASSERT(value->type == JsonValueType::JSON_VALUE_FLOAT);
+                RUNTIME_ASSERT_MSG(value->type == JsonValueType::JSON_VALUE_FLOAT, error_msg, key, json_vaule_type_names[JsonValueType::JSON_VALUE_FLOAT], json_vaule_type_names[value->type]);
                 return value->floating;
             } else if constexpr (std::is_same_v<T, bool>) {
-                RUNTIME_ASSERT(value->type == JsonValueType::JSON_VALUE_BOOL);
+                RUNTIME_ASSERT_MSG(value->type == JsonValueType::JSON_VALUE_BOOL, error_msg, key, json_vaule_type_names[JsonValueType::JSON_VALUE_BOOL], json_vaule_type_names[value->type]);
                 return value->boolean;
             } else if constexpr (std::is_same_v<T, char*> || std::is_same_v<T, const char*>) {
-                RUNTIME_ASSERT(value->type == JsonValueType::JSON_VALUE_STRING);
+                RUNTIME_ASSERT_MSG(value->type == JsonValueType::JSON_VALUE_STRING, error_msg, key, json_vaule_type_names[JsonValueType::JSON_VALUE_STRING], json_vaule_type_names[value->type]);
                 return value->string.data;
             } else if constexpr (std::is_same_v<T, View<char>>) {
-                RUNTIME_ASSERT(value->type == JsonValueType::JSON_VALUE_STRING);
+                RUNTIME_ASSERT_MSG(value->type == JsonValueType::JSON_VALUE_STRING, error_msg, key, json_vaule_type_names[JsonValueType::JSON_VALUE_STRING], json_vaule_type_names[value->type]);
                 return value->string;
             } else if constexpr (std::is_same_v<T, JSON*>) {
-                RUNTIME_ASSERT(
+                RUNTIME_ASSERT_MSG(
                     value->type == JsonValueType::JSON_VALUE_OBJECT ||
                     value->type == JsonValueType::JSON_VALUE_ARRAY  ||
-                    value->type == JsonValueType::JSON_VALUE_NULL
+                    value->type == JsonValueType::JSON_VALUE_NULL, 
+                    "JSON_OBJECT_TYPE GOT %s", json_vaule_type_names[value->type]
                 );
                 return value;
             }
@@ -5267,11 +5279,6 @@
     JSON* JSON::Parse(Allocator allocator, const char* json_string, u64 json_string_length) {
         Vector<Token> tokens = vector_create<Token>(allocator, 40);
         lexer_generate_tokens((u8*)json_string, json_string_length, &tokens);
-        for (const Token& token : tokens) {
-            const char* token_type_string = token_to_string(token);
-            LOG_DEBUG("%s(%.*s)\n", token_type_string, token.sv.length, token.sv.data);
-        }
-
         if (tokens[0].type != TS_LEFT_CURLY) {
             return nullptr;
         }
