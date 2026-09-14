@@ -24,7 +24,7 @@ pc: ProjectConfig = ProjectConfig(
     project_name = "pct",
     project_dependencies = [],
     project_debug_with_visual_studio = True,
-    project_executable_names = ["pct_test.exe"]
+    project_executable_names = ["print_thread.exe", "prog4.exe 8 15 12"]
 )
 
 if IS_WINDOWS() and not C_BUILD_IS_DEPENDENCY():

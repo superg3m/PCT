@@ -965,7 +965,7 @@
             }
 
             void skip() {
-                while ((ptr != end) && !ptr->IsValid()) {
+                while (!ptr || ((ptr != end) && !ptr->IsValid())) {
                     ptr++;
                 }
             }
