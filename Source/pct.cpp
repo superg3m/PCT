@@ -42,8 +42,8 @@ typedef enum WaitingBehavior {
     PCT_WAIT_NO_RUNNING = 2
 } WaitingBehavior;
 
-int PCT_GENERATION = 0;
-int PCT_RANDOM_PRIORITY = 0;
+bool PCT_GENERATION = 0;
+bool PCT_RANDOM_PRIORITY = 0;
 WaitingBehavior PCT_WAIT_AND_SYNC = PCT_WAIT_STRICT;
 Hashmap<PThreadKey, ThreadContext> pct_thread_map = {};
 
@@ -56,6 +56,7 @@ void pct_init() {
     srand(time(NULL));
 
     Allocator allocator = allocator_general();
+    pct_thread_map = hashmap_create<PThreadKey, ThreadContext>(allocator);
 
     Error err = Error::SUCCESS;
     size_t file_size = 0;
@@ -66,13 +67,12 @@ void pct_init() {
     }
     
     JSON* root = JSON::Parse(allocator_general(), (char*)data, file_size);
-    PCT_GENERATION = root->get<int>("PCT_GENERATION");
-    PCT_RANDOM_PRIORITY = root->get<int>("PCT_RANDOM_PRIORITY");
+    PCT_GENERATION = root->get<bool>("PCT_GENERATION");
+    PCT_RANDOM_PRIORITY = root->get<bool>("PCT_RANDOM_PRIORITY");
     PCT_WAIT_AND_SYNC = (WaitingBehavior)root->get<int>("PCT_WAIT_AND_SYNC");
 
     // TODO(Jovanni): Fix the arean so you can just free all of this garbage, instead of pointer chasing
 
-    pct_thread_map = hashmap_create<PThreadKey, ThreadContext>(allocator_general());
     pthread_mutex_init(&ptc_mutex, NULL);
     pthread_create(&pct_scheduling_thread_id, NULL, pct_scheduling_thread, NULL);
 }
