@@ -1,6 +1,7 @@
 #define PCT_BOOTSTRAP
 #include "pct.h"
 #include "ckg.h"
+#include "cj.h"
 
 #if defined(__APPLE__) || defined(__MACH__)
     #define sem_wait(s) dispatch_semaphore_wait(*(s), DISPATCH_TIME_FOREVER)
@@ -37,7 +38,16 @@ u64 pct_pthread_hash(void *data, u64 size) {
     return 0;
 }
 
+typedef enum WaitingBehavior {
+    PCT_WAIT_NONE = 0,
+    PCT_WAIT_STRICT = 1,
+    PCT_WAIT_NO_RUNNING = 2
+} WaitingBehavior;
+
 CKG_HashMap(pthread_t, ThreadContext)* pct_thread_map = NULL;
+int PCT_GENERATION = 0;
+int PCT_RANDOM_PRIORITY = 0;
+WaitingBehavior PCT_WAIT_AND_SYNC = PCT_WAIT_STRICT;
 
 void* pct_scheduling_thread(void* arg);
 int random_range(int min, int max) {
@@ -46,6 +56,37 @@ int random_range(int min, int max) {
 
 void pct_init() {
     srand(time(NULL));
+
+    CKG_Error err = CKG_ERROR_SUCCESS;
+    size_t file_size = 0;
+    u8* data = ckg_io_read_entire_file("./pct.json", &file_size, &err);
+    if (err != CKG_ERROR_SUCCESS) {
+        ckg_assert_msg(false, "Error initializing pct | %s\n", ckg_error_str(err));
+        return;
+    }
+
+    CJ_Arena* arena = cj_arena_create(0);
+    JSON* root = cj_parse(arena, (char*)data);
+
+    for (int i = 0; i < cj_vector_count(root->cj_json.key_value_pair_vector); i++) {
+        char* key = root->cj_json.key_value_pair_vector[i].key;
+        JSON* value = root->cj_json.key_value_pair_vector[i].value;
+        int key_length = ckg_cstr_length(key);
+        if (ckg_str_equal(key, key_length, CKG_LIT_ARG("PCT_GENERATION"))) {
+            PCT_GENERATION = value->cj_int;
+        }
+
+        if (ckg_str_equal(key, key_length, CKG_LIT_ARG("PCT_RANDOM_PRIORITY"))) {
+            PCT_RANDOM_PRIORITY = value->cj_int;
+        }
+
+        if (ckg_str_equal(key, key_length, CKG_LIT_ARG("PCT_WAIT_AND_SYNC"))) {
+            PCT_WAIT_AND_SYNC = value->cj_int;
+        }
+    }
+
+    cj_arena_free(arena);
+   
     ckg_hashmap_init_with_hash(pct_thread_map, pthread_t, ThreadContext, false, pct_pthread_hash, pct_pthread_equal);
     pthread_mutex_init(&ptc_mutex, NULL);
     pthread_create(&pct_scheduling_thread_id, NULL, pct_scheduling_thread, NULL);
@@ -148,13 +189,6 @@ int pct_sem_post(sem_t* s) {
     return sem_post(s);
 }
 
-#define PCT_WAIT_NONE 0
-#define PCT_WAIT_STRICT 1
-#define PCT_WAIT_NO_RUNNING 2
-
-#define PCT_GENERATION 0
-#define PCT_RANDOM_PRIORITY 0
-#define PCT_WAIT_AND_SYNC PCT_WAIT_NO_RUNNING
 // NOTE(Jovanni): This is the main engine of hte scheduler, not sure if it should be join or not tbh
 void* pct_scheduling_thread(void* arg) {
     while (!pct_done) {
@@ -189,24 +223,25 @@ void* pct_scheduling_thread(void* arg) {
                 bool generation_is_equal = value->generation == ctx->generation;
                 bool priority_is_higher = !PCT_RANDOM_PRIORITY ? value->priority > ctx->priority : true; 
 
-                #if PCT_GENERATION
+                if (PCT_GENERATION) {
                     if (generation_is_less || generation_is_equal && priority_is_higher) {
                         ctx = value;
                     }
-                #else
+                } else {
                     if (priority_is_higher) {
                         ctx = value;
                     }
-                #endif
+                }
             })
 
-            #if PCT_WAIT_AND_SYNC == PCT_WAIT_NONE
-                bool wait_and_sync = true;
-            #elif PCT_WAIT_AND_SYNC == PCT_WAIT_STRICT
-                bool wait_and_sync = waiting == pct_thread_map->meta.count;
-            #elif PCT_WAIT_AND_SYNC == PCT_WAIT_NO_RUNNING
-                bool wait_and_sync = running == 0;
-            #endif
+            bool wait_and_sync = false;
+            if (PCT_WAIT_AND_SYNC == PCT_WAIT_NONE) {
+                wait_and_sync = true;
+            } else if (PCT_WAIT_AND_SYNC == PCT_WAIT_STRICT) {
+                wait_and_sync = waiting == pct_thread_map->meta.count;
+            } else if (PCT_WAIT_AND_SYNC == PCT_WAIT_NO_RUNNING) {
+                wait_and_sync = running == 0;
+            }
 
         if (ctx && wait_and_sync) {
             ctx->execution_state = PCT_THREAD_READY;
