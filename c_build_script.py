@@ -30,7 +30,7 @@ pc: ProjectConfig = ProjectConfig(
 if IS_WINDOWS() and not C_BUILD_IS_DEPENDENCY():
     cc.compiler_name = "cl"
 elif IS_DARWIN() and not C_BUILD_IS_DEPENDENCY():
-    cc.compiler_name = "clang++"
+    cc.compiler_name = "clang"
 elif IS_LINUX() and not C_BUILD_IS_DEPENDENCY():
     cc.compiler_name = "gcc"
 
@@ -58,7 +58,7 @@ procedures: Dict[str, ProcedureConfig] = {
     "pct library": ProcedureConfig(
         build_directory=f"./{build_postfix}",
         output_name="PCT.lib",
-        source_files=["../../Source/*.cpp"],
+        source_files=["../../Source/*.c"],
         additional_libs=[],
         compiler_inject_into_args=inject
     ),
