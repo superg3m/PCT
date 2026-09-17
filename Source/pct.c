@@ -45,8 +45,8 @@ typedef enum WaitingBehavior {
 } WaitingBehavior;
 
 CKG_HashMap(pthread_t, ThreadContext)* pct_thread_map = NULL;
-int PCT_GENERATION = 0;
-int PCT_RANDOM_PRIORITY = 0;
+bool PCT_GENERATION = 0;
+bool PCT_RANDOM_PRIORITY = 0;
 WaitingBehavior PCT_WAIT_AND_SYNC = PCT_WAIT_STRICT;
 
 void* pct_scheduling_thread(void* arg);
@@ -74,11 +74,11 @@ void pct_init() {
         JSON* value = root->cj_json.key_value_pair_vector[i].value;
         int key_length = ckg_cstr_length(key);
         if (ckg_str_equal(key, key_length, CKG_LIT_ARG("PCT_GENERATION"))) {
-            PCT_GENERATION = value->cj_int;
+            PCT_GENERATION = value->cj_bool;
         }
 
         if (ckg_str_equal(key, key_length, CKG_LIT_ARG("PCT_RANDOM_PRIORITY"))) {
-            PCT_RANDOM_PRIORITY = value->cj_int;
+            PCT_RANDOM_PRIORITY = value->cj_bool;
         }
 
         if (ckg_str_equal(key, key_length, CKG_LIT_ARG("PCT_WAIT_AND_SYNC"))) {
