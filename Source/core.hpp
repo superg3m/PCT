@@ -4655,6 +4655,11 @@
 
         if (hashmap_has(&keyword_map, sv)) {
             ret.type = hashmap_get(&keyword_map, sv);
+            if (ret.type == TS_KEYWORD_TRUE) {
+                ret.b = true;
+            } else if (ret.type == TS_KEYWORD_FALSE) {
+                ret.b = false;
+            }
         }
 
         return ret;
@@ -4690,18 +4695,6 @@
         } else if (ret.sv.data[0] == '\'') {
             ret.type = TS_LITERAL_CHARACTER;
             ret.c = ret.sv.data[1];
-
-            return ret;
-        }
-
-        if (str_equal(ret.sv.data, sv.length, "true", sizeof("true") - 1)) {
-            ret.type = TS_KEYWORD_TRUE;
-            ret.b = true;
-
-            return ret;
-        } else if (str_equal(ret.sv.data, sv.length, "false", sizeof("false") - 1)) {
-            ret.type = TS_KEYWORD_FALSE;
-            ret.b = false;
 
             return ret;
         }

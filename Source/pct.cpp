@@ -66,7 +66,7 @@ void pct_init() {
         return;
     }
     
-    JSON* root = JSON::Parse(allocator_general(), (char*)data, file_size);
+    JSON* root = JSON::Parse(allocator, (char*)data, file_size);
     PCT_GENERATION = root->get<bool>("PCT_GENERATION");
     PCT_RANDOM_PRIORITY = root->get<bool>("PCT_RANDOM_PRIORITY");
     PCT_WAIT_AND_SYNC = (WaitingBehavior)root->get<int>("PCT_WAIT_AND_SYNC");
