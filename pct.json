@@ -1,5 +1,5 @@
 {
-    "PCT_GENERATION": false,
+    "PCT_GENERATION": true,
     "PCT_RANDOM_PRIORITY": false,
     "PCT_WAIT_AND_SYNC": 2
 }
