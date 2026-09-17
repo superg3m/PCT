@@ -1,1 +1,2 @@
 LOOK AT THE PAPER AND RECREATE THE problems they said
+ask ai for c code that has race conditions.
