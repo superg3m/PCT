@@ -59,7 +59,7 @@ void pct_init() {
 
     CKG_Error err = CKG_ERROR_SUCCESS;
     size_t file_size = 0;
-    u8* data = ckg_io_read_entire_file("./pct.json", &file_size, &err);
+    u8* data = ckg_io_read_entire_file("../../../../pct.json", &file_size, &err);
     if (err != CKG_ERROR_SUCCESS) {
         ckg_assert_msg(false, "Error initializing pct | %s\n", ckg_error_str(err));
         return;
