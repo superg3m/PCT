@@ -1,6 +1,6 @@
 # Building
-- debug: ./c_build.ps1 -BuildType debug -Build
-- release: ./c_build.ps1 -BuildType release -Build
+- debug: pwsh ./c_build.ps1 -BuildType debug -Build
+- release: pwsh ./c_build.ps1 -BuildType release -Build
 
 c_build is an open source build system for c/c++.
 The commands that are run on your computer are transparently shown
@@ -26,5 +26,5 @@ Compilation of prog4.exe successful
 # Running
 run the exe like normal or for convience tack on the -Run flag
 
-- debug: ./c_build.ps1 -BuildType debug -Run
-- release: ./c_build.ps1 -BuildType release -Run
+- debug: pwsh ./c_build.ps1 -BuildType debug -Run
+- release: pwsh ./c_build.ps1 -BuildType release -Run
