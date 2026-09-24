@@ -1049,7 +1049,7 @@
     template<typename K>
     u64 hashmap_safe_hash(HashFunction* hash_func, K key) {
         if constexpr (CompileTime<K>::TYPE_IS_CSTRING) {
-            return hash_func((void*)key, 0);
+            return hash_func((void*)key, str_length((char*)key));
         } else if constexpr (CompileTime<K>::TYPE_IS_STRING_VIEW) {
             return hash_func(&key, 0);
         } else if constexpr (CompileTime<K>::TYPE_IS_TRIVIAL && !CompileTime<K>::TYPE_IS_POINTER) {
@@ -2215,13 +2215,12 @@
         }
 
         u64 cstring_hash(const void* str, size_t str_length) {
-            UNUSED(str_length);
-
             u64 hash = 5381;
             u8* str_ptr = (u8*)str;
             int c;
 
-            while ((c = *str_ptr++)) {
+            for (int i = 0; i < str_length; i++) {
+                c = str_ptr[i];
                 hash = ((hash << 5) + hash) + c;
             }
 
@@ -2402,8 +2401,8 @@
         u64 ret = 0;
         while (*c_string++ != '\0') {
             ret += 1;
-        } 
-
+        }
+        
         return ret;
     }
 
@@ -4763,7 +4762,7 @@
     // --
 
     INTERNAL_FUNCTION bool is_whitespace(char c) {
-        return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\0';
+        return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\0' || c == '\xbe';
     }
 
     INTERNAL_FUNCTION Lexer create_lexer(View<char> source, Vector<Token>* out_tokens) {
@@ -5262,7 +5261,9 @@
                         return nullptr;
                     }
 
-                    const char* key = str_allocate(root->allocator, key_token.sv.data, key_token.sv.length);
+                    char* key = str_allocate(root->allocator, key_token.sv.data, key_token.sv.length + 1);
+                    key[key_token.sv.length] = '\0';
+
                     Token colon_token = parser_consume_next_token(parser);
                     if (colon_token.type != TS_COLON) {
                         LOG_ERROR("JSON Parser Expected: %s | got %s\n", token_to_string(TS_COLON), token_to_string(colon_token));

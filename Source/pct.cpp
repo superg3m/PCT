@@ -21,7 +21,7 @@ typedef enum ThreadExecutionState {
 typedef struct ThreadContext {
     int priority;
     int generation;
-    volatile ThreadExecutionState execution_state;
+    ThreadExecutionState execution_state;
     sem_t* semaphore;
 } ThreadContext;
 
@@ -120,11 +120,12 @@ void init_pct_thread() {
     ctx.semaphore = (sem_t*)malloc(sizeof(sem_t));
     sem_init(ctx.semaphore, 0, 0);
 
-    atomic_increment(&pct_active_thread_count);
-
-    u64 thread_index = atomic_increment(&pct_thread_index); 
-    pthread_setspecific(pct_pthread_key, U64_TO_PTR(thread_index));
-    pct_threads[thread_index] = ctx;
+    INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
+        atomic_increment(&pct_active_thread_count);
+        u64 thread_index = atomic_increment(&pct_thread_index); 
+        pthread_setspecific(pct_pthread_key, U64_TO_PTR(thread_index));
+        pct_threads[thread_index] = ctx;
+    INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
 }
 
 
@@ -142,13 +143,17 @@ int pct_get_thread_priority() {
 void pct_markthread_done() {
     if (PCT_DISABLE) return;
 
-    u64 thread_index = PTR_TO_U64(pthread_getspecific(pct_pthread_key));
-    pct_threads[thread_index].execution_state = PCT_THREAD_NONE;
-    atomic_decrement(&pct_active_thread_count);
+    INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
+        u64 thread_index = PTR_TO_U64(pthread_getspecific(pct_pthread_key));
+        if (thread_index && pct_threads[thread_index].execution_state != PCT_THREAD_NONE) {
+            pct_threads[thread_index].execution_state = PCT_THREAD_NONE;
+            atomic_decrement(&pct_active_thread_count);
+        }
+    INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
 }
 
 int pct_pthread_create(pthread_t* thread_id, const pthread_attr_t* attr, void*(*func)(void*), void* arg) {
-    RUNTIME_ASSERT_MSG(!PCT_DISABLE && (pct_thread_index < PCT_MAX_THREAD_COUNT), "MAX_THREAD_COUNT: %d has been exceeded\n", PCT_MAX_THREAD_COUNT);
+    RUNTIME_ASSERT_MSG(!PCT_DISABLE || (pct_thread_index < PCT_MAX_THREAD_COUNT), "MAX_THREAD_COUNT: %d has been exceeded\n", PCT_MAX_THREAD_COUNT);
     return pthread_create(thread_id, NULL, func, arg);
 }
 
@@ -172,8 +177,13 @@ int pct_pthread_mutex_lock(pthread_mutex_t* mutex) {
     
     sem_wait(scheduler_semaphore); // NOTE(Jovanni): wait for scheduler, this might be unsafe if hashmap reallocates???
 
+    
     int ret = pthread_mutex_lock(mutex);
-    pct_threads[thread_index].execution_state = PCT_THREAD_RUNNING;
+
+    // TODO(Jovanni): Maybe just do an atomic set
+    INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
+        pct_threads[thread_index].execution_state = PCT_THREAD_RUNNING;
+    INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
 
     return ret;
 }
@@ -203,7 +213,9 @@ int pct_sem_wait(sem_t* s) {
     sem_wait(scheduler_semaphore); // NOTE(Jovanni): wait for scheduler, this might be unsafe if hashmap reallocates???
 
     int ret = sem_wait(s);
-    pct_threads[thread_index].execution_state = PCT_THREAD_RUNNING;
+    INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
+        pct_threads[thread_index].execution_state = PCT_THREAD_RUNNING;
+    INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
 
     return ret;
 }
@@ -216,12 +228,10 @@ void* pct_scheduling_thread(void* arg) {
     if (PCT_DISABLE) return 0; // NOTE(Jovanni): Techincially this thread never starts if this is true, but its more clear this way
 
     while (!pct_done) {
-        // TODO(Jovanni): [SLOW] I can replace this later with a heap data structure, or just sort or whatever
-
         INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
             ThreadContext* ctx = NULL;
             int waiting = 0; int ready = 0; int running = 0;
-            for (int i = 0; i < PCT_MAX_THREAD_COUNT; i++) {
+            for (int i = 0; i < PCT_MAX_THREAD_COUNT - 1; i++) {
                 ThreadContext* value = &pct_threads[(i + 1)]; // NOTE(Jovanni): the 0th index is nullspace
                 switch (value->execution_state) {
                     case PCT_THREAD_NONE: {
@@ -279,7 +289,6 @@ void* pct_scheduling_thread(void* arg) {
             ctx->execution_state = PCT_THREAD_READY;
             ctx->generation += 1;
             sem_t* scheduler_semaphore = ctx->semaphore;
-
             INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
 
             sem_post(scheduler_semaphore);
