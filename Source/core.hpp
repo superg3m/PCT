@@ -191,7 +191,7 @@
     #define KB(value) ((size_t)(value) * 1024L)
     #define MB(value) ((size_t)KB(value) * 1024L)
     #define GB(value) ((size_t)MB(value) * 1024L)
-    #define OFFSET_OF(type, member) (size_t)(&(((type*)0)->member))
+
     #define FIRST_DIGIT(number) ((int)number % 10);
     #define GET_BIT(number, bit_to_check) ((number & (1 << bit_to_check)) >> bit_to_check)
     #define SET_BIT(number, bit_to_set) number |= (1 << bit_to_set);
@@ -213,6 +213,12 @@
     #define DEFAULT_CAPACITY 16
     #define DEFAULT_LOAD_FACTOR 0.7f
     #define UNUSED(a) (void)a
+
+    #define PTR_TO_U64(ptr)     ((u64)((void*)ptr))
+    #define U64_TO_PTR(unsigned_64) ((void*)unsigned_64)
+    #define MEMBER(Type, member)      (((Type*)0)->member)
+    #define OFFSET_OF(Type, member)      PTR_TO_U64(&MEMBER(Type, member))
+    #define DEFER(begin, end) for(int _i_ = ((begin), 0); !_i_; _i_ = 1, (end))
 
     #define INTERNAL_FUNCTION static
     #define LOCAL_PERSIST static
@@ -243,14 +249,14 @@
         #define UNUSED_FUNCTION
         #define POPCOUNT32(x) __popcnt((x))
         #define POPCOUNT64(x) __popcnt64((x))
-    #elif defined(__clang__)
+    #elif defined(__clang__) || defined(__GNUC__) || defined(__GNUG__)
         #define UNUSED_FUNCTION __attribute__((used))
         #define POPCOUNT32(x) __builtin_popcount((x))
         #define POPCOUNT64(x) __builtin_popcountll((x))
-    #elif defined(__GNUC__) || defined(__GNUG__)
-        #define UNUSED_FUNCTION __attribute__((used))
-        #define POPCOUNT32(x) __builtin_popcount((x))
-        #define POPCOUNT64(x) __builtin_popcountll((x))
+
+        #include <stdatomic.h>
+        #define atomic_increment(dst) atomic_fetch_add(dst, 1)
+        #define atomic_decrement(dst) atomic_fetch_sub(dst, 1)
     #endif
 #endif
 
