@@ -41,6 +41,7 @@
     #include <stdint.h>
     #include <stdlib.h>
     #include <type_traits>
+    #include <bit> // NOTE(Jovanni): This is just for std::popcount
 
     using u8  = uint8_t;
     using u16 = uint16_t;
@@ -184,7 +185,8 @@
     #undef DEFAULT_LOAD_FACTOR
 
     #define STRINGIFY(entry) #entry
-    #define GLUE(a, b) a##b
+    #define _GLUE_(a, b) a##b
+    #define GLUE(a, b) _GLUE_(a, b)
 
     #define KB(value) ((size_t)(value) * 1024L)
     #define MB(value) ((size_t)KB(value) * 1024L)
@@ -239,10 +241,16 @@
 
     #if defined(_MSC_VER)
         #define UNUSED_FUNCTION
+        #define POPCOUNT32(x) __popcnt((x))
+        #define POPCOUNT64(x) __popcnt64((x))
     #elif defined(__clang__)
         #define UNUSED_FUNCTION __attribute__((used))
+        #define POPCOUNT32(x) __builtin_popcount((x))
+        #define POPCOUNT64(x) __builtin_popcountll((x))
     #elif defined(__GNUC__) || defined(__GNUG__)
         #define UNUSED_FUNCTION __attribute__((used))
+        #define POPCOUNT32(x) __builtin_popcount((x))
+        #define POPCOUNT64(x) __builtin_popcountll((x))
     #endif
 #endif
 
@@ -1385,7 +1393,7 @@
     enum ArenaFlag {
         ARENA_FLAG_FIXED        = 0x1,
         ARENA_FLAG_CIRCULAR     = 0x2,
-        ARENA_FLAG_STACK_MEMORY = 0x4
+        ARENA_FLAG_EXTENDABLE_PAGES     = 0x4,
     };
 
     struct Arena {
@@ -1395,8 +1403,8 @@
         u8 alignment = 0;
         u8* base_address = nullptr;
 
-        Stack<size_t> stack_sizes;
-        Stack<size_t>  temp_used_stack;
+        Stack<size_t> stack_sizes; // TODO(Jovanni): remove this in favor of the Temp() stuff
+        Stack<size_t> temp_used_stack; // TODO(Jovanni) remove this in favor of the Temp() stuff
         Allocator allocator;
     };
 
@@ -1410,8 +1418,9 @@
     void arena_begin_temp(Arena* arena);
     void arena_end_temp(Arena* arena);
 
-    #define ArenaCreateFixed(memory, allocation_size, is_stack_memory) arena_create(memory, allocation_size, ARENA_FLAG_FIXED|(is_stack_memory ? ARENA_FLAG_STACK_MEMORY : 0), 8)
-    #define ArenaCreateCircular(memory, allocation_size, is_stack_memory) arena_create(memory, allocation_size, ARENA_FLAG_CIRCULAR|(is_stack_memory ? ARENA_FLAG_STACK_MEMORY : 0), 8)
+    #define ARENA_CREATE_EXPENDABLE_PAGES(memory, allocation_size) arena_create(memory, allocation_size, ARENA_FLAG_EXTENDABLE_PAGES, 8)
+    #define ARENA_CREATE_FIXED(memory, allocation_size) arena_create(memory, allocation_size, ARENA_FLAG_FIXED|(is_stack_memory ? ARENA_FLAG_STACK_MEMORY : 0), 8)
+    #define ARENA_CREATE_CIRCULAR(memory, allocation_size) arena_create(memory, allocation_size, ARENA_FLAG_CIRCULAR|(is_stack_memory ? ARENA_FLAG_STACK_MEMORY : 0), 8)
 #endif
 
 #if defined(CORE_HANDLE_REGISTRY)
@@ -4102,8 +4111,9 @@
 
         RUNTIME_ASSERT_MSG(memory, "Memory can't be a null pointer!\n");
         RUNTIME_ASSERT_MSG(allocation_size != 0, "Can't have a zero allocation size!\n");
-        int mask = ARENA_FLAG_FIXED | ARENA_FLAG_CIRCULAR;
-        RUNTIME_ASSERT_MSG((flags & mask) != mask, "Can't have both a fixed and circular arena!\n");
+        int mask = ARENA_FLAG_FIXED|ARENA_FLAG_CIRCULAR|ARENA_FLAG_EXTENDABLE_PAGES;
+        int number_of_bits_set = POPCOUNT32(flags & mask);
+        RUNTIME_ASSERT_MSG(number_of_bits_set > 1, "Arena flags (ARENA_FLAG_FIXED, ARENA_FLAG_CIRCULAR, ARENA_FLAG_EXTENDABLE_PAGES) are all muturally exclusive!\n");
 
         ret.flags = flags;
         ret.used = 0;

@@ -1,8 +1,10 @@
 // 04_branch_deadlock.cpp
 
-#include <pthread.h>
+// NOTE(Jovanni): Interestingly this can no longer deadlock if I wait for all threads to be waiting
+// However because you can adjust the pct config you can get different behavior which is neat.
+
+#include "../../Source/pct.h"
 #include <stdio.h>
-#include <unistd.h>
 
 pthread_mutex_t account_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -22,6 +24,7 @@ void* account_thread(void*) {
         pthread_mutex_unlock(&account_mutex);
     }
 
+    pct_markthread_done();
     return NULL;
 }
 
@@ -40,10 +43,12 @@ void* logger_thread(void*) {
         pthread_mutex_unlock(&log_mutex);
     }
 
+    pct_markthread_done();
     return NULL;
 }
 
 int main() {
+    pct_init();
     pthread_t a;
     pthread_t b;
 
@@ -52,4 +57,7 @@ int main() {
 
     pthread_join(a, NULL);
     pthread_join(b, NULL);
+
+    pct_shutdown();
+    return 0;
 }

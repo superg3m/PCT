@@ -24,7 +24,7 @@ pc: ProjectConfig = ProjectConfig(
     project_name = "pct",
     project_dependencies = [],
     project_debug_with_visual_studio = True,
-    project_executable_names = ["print_thread.exe", "prog4.exe 8 15 12"]
+    project_executable_names = ["print_thread.exe", "prog4.exe 8 15 12"] #["branch_deadlock.exe"]
 )
 
 if IS_WINDOWS() and not C_BUILD_IS_DEPENDENCY():
@@ -91,6 +91,30 @@ procedures: Dict[str, ProcedureConfig] = {
         build_directory=f"./Test/Prog4/{build_postfix}",
         output_name="prog4.exe",
         source_files=["../../*.c"],
+        additional_libs=executable_procedure_libs,
+        compiler_inject_into_args=["-O0"]
+    ),
+
+    "branch_deadlock": ProcedureConfig(
+        build_directory=f"./Test/AI_Generated/{build_postfix}",
+        output_name="branch_deadlock.exe",
+        source_files=["../../branch_deadlock.c"],
+        additional_libs=executable_procedure_libs,
+        compiler_inject_into_args=["-O0"]
+    ),
+
+    "nested_deadlock": ProcedureConfig(
+        build_directory=f"./Test/AI_Generated/{build_postfix}",
+        output_name="nested_deadlock.exe",
+        source_files=["../../nested_deadlock.c"],
+        additional_libs=executable_procedure_libs,
+        compiler_inject_into_args=["-O0"]
+    ),
+
+    "rare_deadlock": ProcedureConfig(
+        build_directory=f"./Test/AI_Generated/{build_postfix}",
+        output_name="common_deadlock.exe",
+        source_files=["../../common_deadlock.c"],
         additional_libs=executable_procedure_libs,
         compiler_inject_into_args=["-O0"]
     ),
