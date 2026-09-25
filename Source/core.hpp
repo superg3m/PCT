@@ -253,10 +253,6 @@
         #define UNUSED_FUNCTION __attribute__((used))
         #define POPCOUNT32(x) __builtin_popcount((x))
         #define POPCOUNT64(x) __builtin_popcountll((x))
-
-        #include <stdatomic.h>
-        #define atomic_increment(dst) atomic_fetch_add(dst, 1)
-        #define atomic_decrement(dst) atomic_fetch_sub(dst, 1)
     #endif
 #endif
 

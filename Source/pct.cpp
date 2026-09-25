@@ -30,14 +30,14 @@ pthread_mutex_t ptc_mutex;
 pthread_t pct_scheduling_thread_id;
 pthread_cond_t pct_threads_are_waiting_condition;
 
+pthread_t pct_main_thread;
 pthread_key_t pct_pthread_key;
 
 // PCT_MAX_THREAD_COUNT is 1024 + 1 because the zero index is nullspace
-#define PCT_MAX_THREAD_COUNT 1025
+#define PCT_MAX_THREAD_COUNT 1024 + 1
 
-// TODO(Jovanni): Fix the atomic stuff...
-atomic_int pct_thread_index = 1; // NOTE(Jovanni): the 0th index is nullspace
-atomic_int pct_active_thread_count = 0;
+u64 pct_thread_index = 1; // NOTE(Jovanni): the 0th index is nullspace
+u64 pct_active_thread_count = 0;
 ThreadContext pct_threads[PCT_MAX_THREAD_COUNT] = {};
 
 typedef enum WaitingBehavior {
@@ -65,6 +65,7 @@ void pct_init() {
     // TODO(Jovanni): Fix the aren, to have expendable pages so you can just use an arena allocator
     // arena = ARENA_CREATE_EXTENDABLE_PAGES()
     Allocator allocator = allocator_general();
+    pct_main_thread = pthread_self();
 
     Error err = Error::SUCCESS;
     size_t file_size = 0;
@@ -113,19 +114,17 @@ void pct_shutdown() {
 }
 
 void init_pct_thread() {
+    if (pthread_equal(pct_main_thread, pthread_self())) return;
+
     ThreadContext ctx = {0};
     ctx.generation = 0;
     ctx.execution_state = PCT_THREAD_RUNNING;
     ctx.priority = random_range(1, 1000);
     ctx.semaphore = (sem_t*)malloc(sizeof(sem_t));
     sem_init(ctx.semaphore, 0, 0);
-
-    INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
-        atomic_increment(&pct_active_thread_count);
-        u64 thread_index = atomic_increment(&pct_thread_index); 
-        pthread_setspecific(pct_pthread_key, U64_TO_PTR(thread_index));
-        pct_threads[thread_index] = ctx;
-    INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
+    pct_active_thread_count += 1;
+    pthread_setspecific(pct_pthread_key, U64_TO_PTR(pct_thread_index));
+    pct_threads[pct_thread_index++] = ctx;
 }
 
 
@@ -133,7 +132,9 @@ int pct_get_thread_priority() {
     if (PCT_DISABLE) return -1;
 
     if (pthread_getspecific(pct_pthread_key) == NULL) {
-        init_pct_thread();
+        INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
+            init_pct_thread();
+        INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
     }
 
     u64 thread_index = PTR_TO_U64(pthread_getspecific(pct_pthread_key));
@@ -143,11 +144,11 @@ int pct_get_thread_priority() {
 void pct_markthread_done() {
     if (PCT_DISABLE) return;
 
+    u64 thread_index = PTR_TO_U64(pthread_getspecific(pct_pthread_key));
     INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
-        u64 thread_index = PTR_TO_U64(pthread_getspecific(pct_pthread_key));
         if (thread_index && pct_threads[thread_index].execution_state != PCT_THREAD_NONE) {
             pct_threads[thread_index].execution_state = PCT_THREAD_NONE;
-            atomic_decrement(&pct_active_thread_count);
+            pct_active_thread_count -= 1;
         }
     INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
 }
@@ -161,7 +162,9 @@ int pct_pthread_mutex_lock(pthread_mutex_t* mutex) {
     if (PCT_DISABLE) return pthread_mutex_lock(mutex);
 
     if (pthread_getspecific(pct_pthread_key) == NULL) {
-        init_pct_thread();
+        INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
+            init_pct_thread();
+        INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
     }
 
     u64 thread_index = PTR_TO_U64(pthread_getspecific(pct_pthread_key));
@@ -177,7 +180,6 @@ int pct_pthread_mutex_lock(pthread_mutex_t* mutex) {
     
     sem_wait(scheduler_semaphore); // NOTE(Jovanni): wait for scheduler, this might be unsafe if hashmap reallocates???
 
-    
     int ret = pthread_mutex_lock(mutex);
 
     // TODO(Jovanni): Maybe just do an atomic set
@@ -196,7 +198,9 @@ int pct_sem_wait(sem_t* s) {
     if (PCT_DISABLE) return sem_wait(s);
 
     if (pthread_getspecific(pct_pthread_key) == NULL) {
-        init_pct_thread();
+        INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
+            init_pct_thread();
+        INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
     }
 
     u64 thread_index = PTR_TO_U64(pthread_getspecific(pct_pthread_key));
