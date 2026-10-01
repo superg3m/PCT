@@ -2,10 +2,6 @@
 #include "pct.h"
 #include "core.hpp"
 
-// TODO(Jovanni): Actually research volatile, I think its to tell the compiler not to optimize away
-// a memory access via caching or any other method. I think if you surround a memory access around 
-// a mutex then the compiler already knows not to reorder it or cache it.
-
 #if defined(__APPLE__) || defined(__MACH__)
     #define sem_wait(s) dispatch_semaphore_wait(*(s), DISPATCH_TIME_FOREVER)
     #define sem_post(s) dispatch_semaphore_signal(*(s))
@@ -33,7 +29,15 @@ pthread_cond_t pct_threads_are_waiting_condition;
 pthread_t pct_main_thread;
 pthread_key_t pct_pthread_key;
 
-// PCT_MAX_THREAD_COUNT is 1024 + 1 because the zero index is nullspace
+/*
+TODO(Jovanni): Wrap mutex around a debugging thing
+struct Mutex {
+    pthread_mutex_t m
+    bool locked
+};
+*/
+
+// NOTE(Jovanni) PCT_MAX_THREAD_COUNT is 1024 + 1 because the zero index is nullspace
 #define PCT_MAX_THREAD_COUNT 1024 + 1
 
 u64 pct_thread_index = 1; // NOTE(Jovanni): the 0th index is nullspace
@@ -56,13 +60,10 @@ int random_range(int min, int max) {
     return (rand() % (max - min + 1)) + min;
 }
 
-#define INTERNAL_PCT_SAFE_PTHREADS_LOCK(m) int GLUE(result, __LINE__) = pthread_mutex_lock((m)); RUNTIME_ASSERT_MSG(GLUE(result, __LINE__) == 0, "Error locking pct_mutex: %s\n", strerror(GLUE(result, __LINE__)))
-#define INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(m) int GLUE(result, __LINE__) = pthread_mutex_unlock((m)); RUNTIME_ASSERT_MSG(GLUE(result, __LINE__) == 0, "Error unlocking pct_mutex: %s\n", strerror(GLUE(result, __LINE__)));
-
 void pct_init() {
     srand(time(NULL));
 
-    // TODO(Jovanni): Fix the aren, to have expendable pages so you can just use an arena allocator
+    // TODO(Jovanni): Fix the arena, to have expendable pages so you can just use an arena allocator
     // arena = ARENA_CREATE_EXTENDABLE_PAGES()
     Allocator allocator = allocator_general();
     pct_main_thread = pthread_self();
@@ -100,9 +101,9 @@ void pct_shutdown() {
 
     pct_done = true;
 
-    INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
+    pthread_mutex_lock(&ptc_mutex);
         pthread_cond_signal(&pct_threads_are_waiting_condition);
-    INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
+    pthread_mutex_unlock(&ptc_mutex);
 
     pthread_join(pct_scheduling_thread_id, NULL);
 
@@ -132,9 +133,9 @@ int pct_get_thread_priority() {
     if (PCT_DISABLE) return -1;
 
     if (pthread_getspecific(pct_pthread_key) == NULL) {
-        INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
+        pthread_mutex_lock(&ptc_mutex);
             init_pct_thread();
-        INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
+        pthread_mutex_unlock(&ptc_mutex);
     }
 
     u64 thread_index = PTR_TO_U64(pthread_getspecific(pct_pthread_key));
@@ -145,12 +146,12 @@ void pct_markthread_done() {
     if (PCT_DISABLE) return;
 
     u64 thread_index = PTR_TO_U64(pthread_getspecific(pct_pthread_key));
-    INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
+    pthread_mutex_lock(&ptc_mutex);
         if (thread_index && pct_threads[thread_index].execution_state != PCT_THREAD_NONE) {
             pct_threads[thread_index].execution_state = PCT_THREAD_NONE;
             pct_active_thread_count -= 1;
         }
-    INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
+    pthread_mutex_unlock(&ptc_mutex);
 }
 
 int pct_pthread_create(pthread_t* thread_id, const pthread_attr_t* attr, void*(*func)(void*), void* arg) {
@@ -162,9 +163,9 @@ int pct_pthread_mutex_lock(pthread_mutex_t* mutex) {
     if (PCT_DISABLE) return pthread_mutex_lock(mutex);
 
     if (pthread_getspecific(pct_pthread_key) == NULL) {
-        INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
+        pthread_mutex_lock(&ptc_mutex);
             init_pct_thread();
-        INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
+        pthread_mutex_unlock(&ptc_mutex);
     }
 
     u64 thread_index = PTR_TO_U64(pthread_getspecific(pct_pthread_key));
@@ -172,20 +173,20 @@ int pct_pthread_mutex_lock(pthread_mutex_t* mutex) {
         return pthread_mutex_lock(mutex);
     }
 
-    INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
+    pthread_mutex_lock(&ptc_mutex);
         pct_threads[thread_index].execution_state = PCT_THREAD_WAITING;
         sem_t* scheduler_semaphore = pct_threads[thread_index].semaphore;
         pthread_cond_signal(&pct_threads_are_waiting_condition);
-    INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
+    pthread_mutex_unlock(&ptc_mutex);
     
     sem_wait(scheduler_semaphore); // NOTE(Jovanni): wait for scheduler, this might be unsafe if hashmap reallocates???
 
     int ret = pthread_mutex_lock(mutex);
 
     // TODO(Jovanni): Maybe just do an atomic set
-    INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
+    pthread_mutex_lock(&ptc_mutex);
         pct_threads[thread_index].execution_state = PCT_THREAD_RUNNING;
-    INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
+    pthread_mutex_unlock(&ptc_mutex);
 
     return ret;
 }
@@ -198,9 +199,9 @@ int pct_sem_wait(sem_t* s) {
     if (PCT_DISABLE) return sem_wait(s);
 
     if (pthread_getspecific(pct_pthread_key) == NULL) {
-        INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
+        pthread_mutex_lock(&ptc_mutex);
             init_pct_thread();
-        INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
+        pthread_mutex_unlock(&ptc_mutex);
     }
 
     u64 thread_index = PTR_TO_U64(pthread_getspecific(pct_pthread_key));
@@ -208,18 +209,18 @@ int pct_sem_wait(sem_t* s) {
         return sem_wait(s);
     }
 
-    INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
+    pthread_mutex_lock(&ptc_mutex);
         pct_threads[thread_index].execution_state = PCT_THREAD_WAITING;
         sem_t* scheduler_semaphore = pct_threads[thread_index].semaphore;
         pthread_cond_signal(&pct_threads_are_waiting_condition);
-    INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
+    pthread_mutex_unlock(&ptc_mutex);
     
     sem_wait(scheduler_semaphore); // NOTE(Jovanni): wait for scheduler, this might be unsafe if hashmap reallocates???
 
     int ret = sem_wait(s);
-    INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
+    pthread_mutex_lock(&ptc_mutex);
         pct_threads[thread_index].execution_state = PCT_THREAD_RUNNING;
-    INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
+    pthread_mutex_unlock(&ptc_mutex);
 
     return ret;
 }
@@ -232,7 +233,7 @@ void* pct_scheduling_thread(void* arg) {
     if (PCT_DISABLE) return 0; // NOTE(Jovanni): Techincially this thread never starts if this is true, but its more clear this way
 
     while (!pct_done) {
-        INTERNAL_PCT_SAFE_PTHREADS_LOCK(&ptc_mutex);
+        pthread_mutex_lock(&ptc_mutex);
             ThreadContext* ctx = NULL;
             int waiting = 0; int ready = 0; int running = 0;
             for (int i = 0; i < PCT_MAX_THREAD_COUNT - 1; i++) {
@@ -293,11 +294,11 @@ void* pct_scheduling_thread(void* arg) {
             ctx->execution_state = PCT_THREAD_READY;
             ctx->generation += 1;
             sem_t* scheduler_semaphore = ctx->semaphore;
-            INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
+            pthread_mutex_unlock(&ptc_mutex);
 
             sem_post(scheduler_semaphore);
         } else {
-            INTERNAL_PCT_SAFE_PTHREADS_UNLOCK(&ptc_mutex);
+            pthread_mutex_unlock(&ptc_mutex);
         }
     }
 
