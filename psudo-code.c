@@ -23,16 +23,15 @@ u64 pct_thread_index = 0;
 u64 pct_priority_change_points[PCT_MAX_THREAD_COUNT];
 
 // NOTE(Jovanni): i'm super curious if we can use union find to track when theres a cycle
-// in the resource mangment, each thread would be a node and each unique resource would be a node.
+// in the resource mangment, each thread would be a node.
 // when a thread owns a resource you can union that node and thread as long as its not apart of another component/thread
 // int parents[PCT_MAX_THREAD_COUNT]
 // int rank[PCT_MAX_THREAD_COUNT]
-// pct_lock_owner -> What thread context owns this lock so I can efficently look it up using union find
+// Hashmap<void*, int> pct_lock_owner -> What thread context owns this lock so I can efficently look it up using union find
 
 // NOTE(Jovanni):
 // we have to maintain the state of the locks so a thread never calls lock unless it can get past it
 // maps pthread_mutex_t* -> owner thread index (0 means unlocked, 0 is nullspace)
-// TODO(Jovanni): union find
 
 void pct_init() {
     // TODO(Jovanni): Just make the change pct_priority_change_points unique values
@@ -69,11 +68,7 @@ void pct_step(ThreadContext* self) {
 
     for (int i = 1; i < PCT_MAX_THREAD_COUNT; i++) {
         if (pct_step_counter == pct_priority_change_points[i]) {
-            // NOTE(Jovanni): from the paper, the i-th change point sets priority to i
-            // NOTE(Jovanni): this is lower than every initial priority, which are all >= d
-            self->priority = i + 1;
-
-            // NOTE(Jovanni): priority changed, so re-pick the highest priority thread
+            self->priority = ???; // TODO(Jovanni): I need to reread the paper how they change prio
             self->execution_state = PCT_THREAD_READY;
             pct_wait_for_scheduler(self);
         }
