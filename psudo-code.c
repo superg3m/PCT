@@ -29,15 +29,11 @@ u64 pct_priority_change_points[PCT_MAX_THREAD_COUNT];
 // int rank[PCT_MAX_THREAD_COUNT]
 // Hashmap<void*, int> pct_lock_owner -> What thread context owns this lock so I can efficently look it up using union find
 
-// NOTE(Jovanni):
-// we have to maintain the state of the locks so a thread never calls lock unless it can get past it
-// maps pthread_mutex_t* -> owner thread index (0 means unlocked, 0 is nullspace)
-
 void pct_init() {
     // TODO(Jovanni): Just make the change pct_priority_change_points unique values
     // will get rid of some headache later.
     for (int i = 0; i < PCT_MAX_THREAD_COUNT; i++) {
-        pct_priority_change_points[i] = random_range(1, k);
+        pct_priority_change_points[i] = random_range(?, ?);
     }
 }
 
