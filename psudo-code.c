@@ -12,7 +12,7 @@ typedef struct ThreadContext {
     int priority;
     ThreadExecutionState execution_state;
     sem_t* semaphore;
-    // void* waiting_on; NOTE(Jovanni): Maybe per thread we could keep track of what we are waiting on instead of union find
+    // ThreadContext* waiting_on; NOTE(Jovanni): Maybe per thread we could keep track of what we are waiting on instead of union find
 } ThreadContext;
 
 u64 pct_step_counter = 0;
@@ -21,6 +21,7 @@ u64 pct_thread_index = 0;
 
 #define PCT_MAX_THREAD_COUNT 1024 + 1
 u64 pct_priority_modify_points[PCT_MAX_THREAD_COUNT];
+// NOTE(Jovanni): (step_counter % ?) == pct_priority_modify_points[i]
 
 // NOTE(Jovanni): i'm super curious if we can use union find to track when theres a cycle
 // in the resource mangment, each thread would be a node.
@@ -129,6 +130,8 @@ int pct_pthread_join(pthread_t target, void** ret) {
     pct_step(self);
 
     // TODO(Jovanni): Some magic in here
+    // I want to wait for the thread to be marked as done and release any locks or resources the
+    // thread is holding... Although if they are holding a resource at this point isn't that erroneous behavior?
 
     return pthread_join(target, ret);
 }
