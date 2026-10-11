@@ -32,15 +32,15 @@ basically I want the thread id to uniquely map to an array slot (I could use my 
     #ifdef __cplusplus
     extern "C" {
     #endif
-    void pct_init();
-    void pct_shutdown();
-    int pct_get_thread_priority();
-    void pct_markthread_done();
-    int pct_pthread_create(pthread_t* thread_id, const pthread_attr_t* attribute, void*(*func)(void*), void* arg);
-    int pct_pthread_mutex_lock(pthread_mutex_t* mutex);
-    int pct_pthread_mutex_unlock(pthread_mutex_t* mutex);
-    int pct_sem_wait(sem_t* s);
-    int pct_sem_post(sem_t* s);
+        void pct_init();
+        void pct_shutdown();
+        int pct_get_thread_priority();
+        void pct_markthread_done();
+        int pct_pthread_create(pthread_t* thread_id, const pthread_attr_t* attribute, void*(*func)(void*), void* arg);
+        int pct_pthread_mutex_lock(pthread_mutex_t* mutex);
+        int pct_pthread_mutex_unlock(pthread_mutex_t* mutex);
+        // int pct_sem_wait(sem_t* s);
+        // int pct_sem_post(sem_t* s);
     #ifdef __cplusplus
     }
     #endif
@@ -52,8 +52,8 @@ basically I want the thread id to uniquely map to an array slot (I could use my 
         #define pthread_mutex_lock(_mutex) pct_pthread_mutex_lock((_mutex))
         #define pthread_mutex_unlock(_mutex) pct_pthread_mutex_unlock((_mutex))
 
-        #define sem_wait(s) pct_sem_wait(s)
-        #define sem_post(s) pct_sem_post(s)
+        // #define sem_wait(s) pct_sem_wait(s)
+        // #define sem_post(s) pct_sem_post(s)
     #else
         #if defined(__APPLE__) || defined(__MACH__)
             #define sem_wait(s) dispatch_semaphore_wait(*(s), DISPATCH_TIME_FOREVER)
