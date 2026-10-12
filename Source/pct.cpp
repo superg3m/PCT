@@ -11,41 +11,78 @@ step counter some thread needs to always be ru
     #define sem_post(s) dispatch_semaphore_signal(*(s))
 #endif
 
-typedef enum ThreadExecutionState {
-    PCT_THREAD_NONE,
-    PCT_THREAD_RUNNING,
-    PCT_THREAD_READY_TO_BE_SCHEDULED,
-    PCT_THREAD_WAITING
-} ThreadExecutionState;
+enum PCT_WaitType {
+    NONE,
+    MUTEX,
+    SEMAPHORE,
+    JOIN
+};
 
 typedef struct ThreadContext {
+    bool finished;
     int priority;
     int generation;
-    ThreadExecutionState execution_state;
-    sem_t* semaphore;
+    sem_t semaphore;
+
+    PCT_WaitType wait_type;
     void* waiting_on;
 } ThreadContext;
+
+struct PThreadKey {
+    pthread_t id;
+
+    PThreadKey(pthread_t id) {
+        this->id = id;
+    }
+
+    bool operator==(PThreadKey other) const {
+        return pthread_equal(this->id, other.id);
+    }
+};
 
 struct FunctionArgument {
     void*(*func)(void*);
     void* arg;
+    ThreadContext* ctx;
 };
 
-void* program_memory = nullptr;
+void pct_markthread_done();
+void* pct_thread_entrypoint(void* arg);
+
 Arena arena = {};
+void* program_memory = nullptr;
 
 pthread_mutex_t pct_mutex;
-pthread_key_t pct_pthread_key;
+u64 pct_step_counter = 0;
+u64 pct_active_threads = 0;
 
 #define PCT_MAX_THREAD_COUNT 1024
+thread_local ThreadContext* self = nullptr;
+Hashmap<PThreadKey, ThreadContext*> pct_thread_map = {};
+Hashmap<void*, ThreadContext*> pct_mutex_owner = {};  // mutex -> holder
+Hashmap<void*, int>            pct_sem_count   = {};  // sem   -> modeled count
 
-u64 pct_thread_index = 1; // NOTE(Jovanni): the 0th index is main_thread
-u64 pct_thread_count = 1; // NOTE(Jovanni): main thread counts
-ThreadContext pct_threads[PCT_MAX_THREAD_COUNT] = {};
-u64 pct_step_counter = 0;
+static bool pct_thead_is_safely_runnable(ThreadContext* t) {
+    switch (t->wait_type) {
+        case NONE: {
+            return true;
+        } break;
 
+        case MUTEX: {
+            return !hashmap_has(&pct_mutex_owner, t->waiting_on) || t->waiting_on == self;
+        } break;
 
-Hashmap<pthread_t, ThreadContext*> pct_thread_map = {};
+        case SEMAPHORE: {
+            return hashmap_get(&pct_sem_count, t->waiting_on) > 0;
+        } break;
+
+        case JOIN:  {
+            return ((ThreadContext*)t->waiting_on)->finished;
+        } break;
+    }
+
+    return false;
+}
 
 bool PCT_DISABLE = false;
 bool PCT_GENERATION = false;
@@ -55,13 +92,14 @@ int random_range(int min, int max) {
     return (rand() % (max - min + 1)) + min;
 }
 
+// NOTE(Jovanni): Maybe I should just allocate these on the heap so I don't have to be careful about 
+// hashmap reallocations
 ThreadContext* pct_allocate_thread_context() {
     ThreadContext* ctx = (ThreadContext*)arena_push(&arena, sizeof(ThreadContext));
-    ctx->generation = 0;
-    ctx->execution_state = PCT_THREAD_WAITING;
+    ctx->finished = false;
+    ctx->generation = 0; 
     ctx->priority = random_range(1, 1000);
-    ctx->semaphore = (sem_t*)malloc(sizeof(sem_t));
-    sem_init(ctx->semaphore, 0, 0);
+    sem_init(&ctx->semaphore, 0, 0);
 
     return ctx;
 }
@@ -72,10 +110,13 @@ void pct_init() {
     // TODO(Jovanni): Fix the arena, to have expendable pages so you can just use an arena allocator
     // arena = ARENA_CREATE_EXTENDABLE_PAGES()
 
-    const int ALLOCATION_SIZE = KB(128);
+    const int ALLOCATION_SIZE = KB(512);
     program_memory = malloc(ALLOCATION_SIZE);
     arena = ARENA_CREATE_FIXED(program_memory, ALLOCATION_SIZE);
     Allocator allocator = arena_to_allocator(&arena);
+
+    // NOTE(Jovanni): Hashmap has a capacity of PCT_MAX_THREAD_COUNT * 4 so I can not have to worry about reallocations
+    pct_thread_map = hashmap_create<PThreadKey, ThreadContext*>(allocator, PCT_MAX_THREAD_COUNT * 4);
 
     Error err = Error::SUCCESS;
     size_t file_size = 0;
@@ -96,17 +137,9 @@ void pct_init() {
     }
 
     ThreadContext* ctx = pct_allocate_thread_context();
-
     pthread_t main_thread = pthread_self();
-    hashmap_put(&pct_thread_map, main_thread, ctx);
-
-    pct_threads[0].execution_state = PCT_THREAD_RUNNING;
-    pct_threads[0].priority = 0;
-    pct_threads[0].generation = 0;
-    pct_threads[0].semaphore = (sem_t*)malloc(sizeof(sem_t));
-    
-    sem_init(pct_threads[0].semaphore, 0, 0);
-    pthread_key_create(&pct_pthread_key, NULL);
+    hashmap_put(&pct_thread_map, PThreadKey(main_thread), ctx);
+    pthread_mutex_init(&pct_mutex, NULL);
 }
 
 void pct_shutdown() {
@@ -116,19 +149,46 @@ void pct_shutdown() {
     // free the memory the arena is using
     free(program_memory);
     pthread_mutex_destroy(&pct_mutex);
-    pthread_key_delete(pct_pthread_key);
 }
 
-ThreadContext* pct_get_self() {
-    u64 thread_index = PTR_TO_U64(pthread_getspecific(pct_pthread_key));
-    ThreadContext* self = &pct_threads[thread_index];
-    return self;
+int pct_pthread_create(pthread_t* thread_id, const pthread_attr_t* attr, void*(*func)(void*), void* arg) {
+    if (PCT_DISABLE) return pthread_create(thread_id, NULL, func, arg);
+    RUNTIME_ASSERT_MSG(pct_active_threads < PCT_MAX_THREAD_COUNT, "MAX_THREAD_COUNT: %d has been exceeded\n", PCT_MAX_THREAD_COUNT);
+
+    // TODO(Jovanni): use the arena allocator here so I can just free the arena
+    FunctionArgument* f = (FunctionArgument*)arena_push(&arena, sizeof(FunctionArgument));
+    f->func = func;
+    f->arg = arg;
+    f->ctx = pct_allocate_thread_context();
+
+    pct_active_threads += 1;
+    int ret = pthread_create(thread_id, NULL, pct_thread_entrypoint, f);
+    hashmap_put(&pct_thread_map, PThreadKey(*thread_id), f->ctx);
+
+    return ret;
+}
+
+int pct_get_thread_priority() {
+    if (PCT_DISABLE) return -1;
+    return self ? self->priority : -1;
+}
+
+void* pct_thread_entrypoint(void* arg) {
+    FunctionArgument* f = (FunctionArgument*)arg;
+    sem_wait(&f->ctx->semaphore);
+    // NOTE(Jovanni): VERY IMPORTANT
+    // I'm 99% sure you can guarentee everyhting past this point is essencially single threaded
+    // meaning you don't have to use locks
+
+    void* ret = f->func(f->arg);
+    pct_markthread_done();
+
+    return ret;
 }
 
 void pct_step() {
     pct_step_counter += 1;
 
-    ThreadContext* self = pct_get_self();
     for (int i = 0; i < PCT_MAX_THREAD_COUNT; i++) {
         /*
         if (pct_step_counter == pct_priority_modify_points[i]) {
@@ -139,35 +199,19 @@ void pct_step() {
     }
 }
 
-bool pct_schedule() {
-    ThreadContext* self = pct_get_self();
-    ThreadContext* next_to_schedule = NULL;
-    for (int i = 0; i < PCT_MAX_THREAD_COUNT; i++) {
-        ThreadContext* value = &pct_threads[i];
-        if (value == self && pct_thread_count > 1) continue;
-
-        switch (value->execution_state) {
-            case PCT_THREAD_NONE: {
-                continue;
-            } break;
-
-            case PCT_THREAD_WAITING: {
-                // noop
-            } break;
-
-            case PCT_THREAD_RUNNING: {
-                // NOTE(Jovanni): Already a thread running
-                return true;
-            } break;
-        }
-        
-        if (!next_to_schedule) {
-            next_to_schedule = value;
-        }
+ThreadContext* pct_pick_next() {
+    ThreadContext* next_to_schedule = nullptr;
+    for (HashmapEntry<PThreadKey, ThreadContext*>& e : pct_thread_map) {
+        ThreadContext* value = e.value;
+        if (value->finished || !pct_thead_is_safely_runnable(value)) continue;
 
         bool generation_is_less = value->generation < next_to_schedule->generation;
         bool generation_is_equal = value->generation == next_to_schedule->generation;
         bool priority_is_higher = !PCT_RANDOM_PRIORITY ? value->priority > next_to_schedule->priority : true; 
+
+        if (!next_to_schedule) {
+            next_to_schedule = value;
+        }
 
         if (PCT_GENERATION) {
             if (generation_is_less || generation_is_equal && priority_is_higher) {
@@ -180,109 +224,57 @@ bool pct_schedule() {
         }
     }
 
-    if (next_to_schedule) {
-        next_to_schedule->execution_state = PCT_THREAD_RUNNING;
-        next_to_schedule->generation += 1;
-        sem_t* scheduler_semaphore = next_to_schedule->semaphore;
-        sem_post(scheduler_semaphore);
-    } else {
-        // NOTE(Jovanni): I think this means that everything is finished or its a deadlock
-        if (pct_thread_count > 0) RUNTIME_ASSERT_MSG(false, "REPORT_DEDLOCK\n");
-        return false;
+    return next_to_schedule;
+}
+
+void pct_yield_control() {
+    pct_step();
+    ThreadContext* next = pct_pick_next();
+    if (!next) {
+        RUNTIME_ASSERT_MSG(false, "REPORT_DEADLOCK\n");
     }
 
-    return true;
+    next->generation += 1;
+    sem_post(&next->semaphore);
+    sem_wait(&self->semaphore);
 }
 
 void pct_markthread_done() {
     if (PCT_DISABLE) return;
+    self->finished = true;
+    pct_active_threads--;
 
-
-    ThreadContext* self = pct_get_self();
-    pthread_mutex_lock(&pct_mutex);
-        self->execution_state = PCT_THREAD_NONE;
-        pct_thread_count -= 1;
-
-        pct_schedule();
-    pthread_mutex_unlock(&pct_mutex);
+    ThreadContext* next = pct_pick_next();
+    if (next) {
+        sem_post(&next->semaphore);
+    } else if (pct_active_threads > 0) {
+        RUNTIME_ASSERT_MSG(false, "REPORT_DEADLOCK\n");
+    }
 }
 
-void pct_wait_for_scheduler() {
-    ThreadContext* self = pct_get_self();
-
-    pthread_mutex_lock(&pct_mutex);
-        self->execution_state = PCT_THREAD_WAITING;
-        if (pct_schedule()) {
-            pthread_mutex_unlock(&pct_mutex);
-            sem_wait(self->semaphore);
-            return;
-        }
-    pthread_mutex_unlock(&pct_mutex);
-}
-
-void* pct_thread_entrypoint(void* arg) {
-    FunctionArgument* f = (FunctionArgument*)arg;
-    
-    pthread_mutex_lock(&pct_mutex);
-        pthread_setspecific(pct_pthread_key, U64_TO_PTR(pct_thread_index));
-        pct_threads[pct_thread_index].generation = 0;
-        pct_threads[pct_thread_index].execution_state = PCT_THREAD_WAITING;
-        pct_threads[pct_thread_index].priority = random_range(1, 1000);
-        pct_threads[pct_thread_index].semaphore = (sem_t*)malloc(sizeof(sem_t));
-        sem_init(pct_threads[pct_thread_index].semaphore, 0, 0);
-
-        u64 thread_index = pct_thread_index;
-
-        pct_thread_index += 1;
-        pct_thread_count += 1;
-    pthread_mutex_unlock(&pct_mutex);
-
-    sem_wait(pct_threads[thread_index].semaphore);
-    void* ret = f->func(f->arg);
-    pct_markthread_done();
-
-    return ret;
-}
-
-int pct_pthread_create(pthread_t* thread_id, const pthread_attr_t* attr, void*(*func)(void*), void* arg) {
-    if (PCT_DISABLE) return pthread_create(thread_id, NULL, func, arg);
-
-    RUNTIME_ASSERT_MSG(pct_thread_index < PCT_MAX_THREAD_COUNT, "MAX_THREAD_COUNT: %d has been exceeded\n", PCT_MAX_THREAD_COUNT);
-
-    // TODO(Jovanni): use the arena allocator here so I can just free the arena
-    FunctionArgument* f = new FunctionArgument();
-    f->func = func;
-    f->arg = arg;
-
-    return pthread_create(thread_id, NULL, pct_thread_entrypoint, f);
-}
-
+/*
 int pct_pthread_mutex_lock(pthread_mutex_t* mutex) {
     if (PCT_DISABLE) return pthread_mutex_lock(mutex);
 
+    self->waiting_on = (void*)mutex;
+    hashmap_put(&pct_owner, (void*)mutex, self);
+
     pct_step();
     pct_wait_for_scheduler();
-
-    // check if you can lock
-
     return pthread_mutex_lock(mutex);
-}
-
-int pct_get_thread_priority() {
-    if (PCT_DISABLE) return -1;
-
-    ThreadContext* self = pct_get_self();
-    return self ? self->priority : -1;
 }
 
 int pct_pthread_mutex_unlock(pthread_mutex_t* mutex) {
     if (PCT_DISABLE) return pthread_mutex_unlock(mutex);
 
-    int ret = pthread_mutex_unlock(mutex);
+    if (hashmap_has(&pct_owner, (void*)mutex)) {
+        hashmap_remove(&pct_owner, (void*)mutex);
+    }
 
     pct_step();
     pct_wait_for_scheduler();
-    return ret;
+    
+    return pthread_mutex_unlock(mutex);
 }
 
 // TODO(Jovanni):
@@ -291,32 +283,41 @@ int pct_sem_wait(sem_t* s) {
 
     pct_step();
     pct_wait_for_scheduler();
+
+    ThreadContext* self = pct_get_self();
+    self->waiting_on = (void*)s;
+    hashmap_put(&pct_owner, (void*)s, self);
     return sem_wait(s);
 }
 
 int pct_sem_post(sem_t* s) {
     if (PCT_DISABLE) return sem_post(s);
 
-    int ret = sem_post(s);
+    if (hashmap_has(&pct_owner, (void*)s)) {
+        hashmap_remove(&pct_owner, (void*)s);
+    }
+
     pct_step();
     pct_wait_for_scheduler();
-    return ret;
+
+    return sem_post(s);
 }
+*/
 
 int pct_pthread_join(pthread_t thread, void** ret) {
     if (PCT_DISABLE) return pthread_join(thread, ret);
+    ThreadContext* waiting_on = hashmap_get(&pct_thread_map, PThreadKey(thread));
 
-    pthread_mutex_lock(&pct_mutex);
-        pct_thread_count -= 1;
-    pthread_mutex_unlock(&pct_mutex);
+    pct_yield_control();
+    while (!waiting_on->finished) {
+        self->wait_type = JOIN;
+        self->waiting_on  = waiting_on;
+        pct_yield_control();
+    }
 
-    pct_step();
-    pct_wait_for_scheduler();
-    int v = pthread_join(thread, ret);
-
-    pthread_mutex_lock(&pct_mutex);
-        pct_thread_count += 1;
-    pthread_mutex_unlock(&pct_mutex);
-
-    return v;
+    self->wait_type = NONE;
+    int result = pthread_join(thread, ret);
+    hashmap_remove(&pct_thread_map, PThreadKey(thread));
+    sem_destroy(&waiting_on->semaphore);
+    return result;
 }

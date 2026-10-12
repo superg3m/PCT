@@ -1198,7 +1198,7 @@
     }
 
     template<typename K, typename V>
-    void hashmap_put(Hashmap<K, V>* h, K key, V value) {
+    V* hashmap_put(Hashmap<K, V>* h, K key, V value) {
         if ((h->entries == nullptr) || (h->load_factor() >= DEFAULT_LOAD_FACTOR)) {
             hashmap_grow_rehash(h);
         }
@@ -1216,6 +1216,8 @@
         entry->value = value;
         entry->filled = true;
         entry->dead = false;
+
+        return &entry->value;
     }
 
     template<typename K, typename V>
@@ -4114,7 +4116,7 @@
         RUNTIME_ASSERT_MSG(allocation_size != 0, "Can't have a zero allocation size!\n");
         int mask = ARENA_FLAG_FIXED|ARENA_FLAG_CIRCULAR|ARENA_FLAG_EXTENDABLE_PAGES;
         int number_of_bits_set = POPCOUNT32(flags & mask);
-        RUNTIME_ASSERT_MSG(number_of_bits_set > 1, "Arena flags (ARENA_FLAG_FIXED, ARENA_FLAG_CIRCULAR, ARENA_FLAG_EXTENDABLE_PAGES) are all muturally exclusive!\n");
+        RUNTIME_ASSERT_MSG(number_of_bits_set == 1, "Arena flags (ARENA_FLAG_FIXED, ARENA_FLAG_CIRCULAR, ARENA_FLAG_EXTENDABLE_PAGES) are all muturally exclusive!\n");
 
         ret.flags = flags;
         ret.used = 0;
