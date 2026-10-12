@@ -2,9 +2,11 @@
 #include "pct.h"
 #include "core.hpp"
 
-/*
-step counter some thread needs to always be ru
-*/
+// TODO(Jovanni):
+// mutex_init and sem_init needs to be tracked
+// so I can just say mutex_owner[mutext]
+// and I can track the count including inital count
+ 
 
 #if defined(__APPLE__) || defined(__MACH__)
     #define sem_wait(s) dispatch_semaphore_wait(*(s), DISPATCH_TIME_FOREVER)
@@ -252,31 +254,37 @@ void pct_markthread_done() {
     }
 }
 
-/*
+
 int pct_pthread_mutex_lock(pthread_mutex_t* mutex) {
     if (PCT_DISABLE) return pthread_mutex_lock(mutex);
-
+    self->wait_type = MUTEX;
     self->waiting_on = (void*)mutex;
-    hashmap_put(&pct_owner, (void*)mutex, self);
-
     pct_step();
-    pct_wait_for_scheduler();
+    
+    if (hashmap_has(&pct_mutex_owner, (void*)mutex)) {
+        pct_yield_control();
+    }
+
+    hashmap_put(&pct_mutex_owner, (void*)mutex, self);
     return pthread_mutex_lock(mutex);
 }
 
 int pct_pthread_mutex_unlock(pthread_mutex_t* mutex) {
     if (PCT_DISABLE) return pthread_mutex_unlock(mutex);
-
-    if (hashmap_has(&pct_owner, (void*)mutex)) {
-        hashmap_remove(&pct_owner, (void*)mutex);
-    }
-
+    self->wait_type = MUTEX;
+    self->waiting_on = (void*)mutex;
     pct_step();
-    pct_wait_for_scheduler();
-    
-    return pthread_mutex_unlock(mutex);
+    pct_yield_control();
+
+    ThreadContext* owner = hashmap_get(&pct_mutex_owner, (void*)mutex);
+    RUNTIME_ASSERT_MSG(self == owner, "Tried to unlock a mutex that I did not own!\n");
+    int ret = pthread_mutex_unlock(mutex);
+    hashmap_remove(&pct_mutex_owner, (void*)mutex);
+
+    return ret;
 }
 
+/*
 // TODO(Jovanni):
 int pct_sem_wait(sem_t* s) {
     if (PCT_DISABLE) return sem_wait(s);
@@ -307,11 +315,11 @@ int pct_sem_post(sem_t* s) {
 int pct_pthread_join(pthread_t thread, void** ret) {
     if (PCT_DISABLE) return pthread_join(thread, ret);
     ThreadContext* waiting_on = hashmap_get(&pct_thread_map, PThreadKey(thread));
+    self->wait_type = JOIN;
+    self->waiting_on = waiting_on;
 
-    pct_yield_control();
+    pct_step();
     while (!waiting_on->finished) {
-        self->wait_type = JOIN;
-        self->waiting_on  = waiting_on;
         pct_yield_control();
     }
 
