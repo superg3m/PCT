@@ -20,8 +20,6 @@ void* worker_a(void*) {
         pthread_mutex_unlock(&b);
         pthread_mutex_unlock(&a);
     }
-
-    pct_markthread_done();
     return 0;
 }
 
@@ -36,7 +34,6 @@ void* worker_b(void*) {
         pthread_mutex_unlock(&b);
     }
 
-    pct_markthread_done();
     return 0;
 }
 

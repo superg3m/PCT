@@ -24,7 +24,6 @@ void* account_thread(void*) {
         pthread_mutex_unlock(&account_mutex);
     }
 
-    pct_markthread_done();
     return NULL;
 }
 
@@ -43,7 +42,6 @@ void* logger_thread(void*) {
         pthread_mutex_unlock(&log_mutex);
     }
 
-    pct_markthread_done();
     return NULL;
 }
 

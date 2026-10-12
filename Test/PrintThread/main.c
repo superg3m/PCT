@@ -12,7 +12,6 @@ void* print_thread(void* arg) {
         pthread_mutex_unlock(&print_mutex);
     }
 
-    pct_markthread_done();
     return 0;
 }
 

@@ -1421,8 +1421,8 @@
     void arena_end_temp(Arena* arena);
 
     #define ARENA_CREATE_EXPENDABLE_PAGES(memory, allocation_size) arena_create(memory, allocation_size, ARENA_FLAG_EXTENDABLE_PAGES, 8)
-    #define ARENA_CREATE_FIXED(memory, allocation_size) arena_create(memory, allocation_size, ARENA_FLAG_FIXED|(is_stack_memory ? ARENA_FLAG_STACK_MEMORY : 0), 8)
-    #define ARENA_CREATE_CIRCULAR(memory, allocation_size) arena_create(memory, allocation_size, ARENA_FLAG_CIRCULAR|(is_stack_memory ? ARENA_FLAG_STACK_MEMORY : 0), 8)
+    #define ARENA_CREATE_FIXED(memory, allocation_size) arena_create(memory, allocation_size, ARENA_FLAG_FIXED, 8)
+    #define ARENA_CREATE_CIRCULAR(memory, allocation_size) arena_create(memory, allocation_size, ARENA_FLAG_CIRCULAR, 8)
 #endif
 
 #if defined(CORE_HANDLE_REGISTRY)

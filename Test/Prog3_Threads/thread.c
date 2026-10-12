@@ -29,7 +29,6 @@ void* thread_worker_sort(void* args) {
 
         sem_wait(&td->done_sem[td->pass]);
     }
-
-    pct_markthread_done();
+    
     return 0;
 }

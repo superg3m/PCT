@@ -96,7 +96,6 @@ void* mom_thread(void* arg) {
 		sem_post(&data->food_sems[i % data->foodpot_count]);
 	}
 		
-	pct_markthread_done();
 	for (int i = 0; i < data->baby_eagle_count; i++) {
 		pthread_join(mom_data->baby_thread_ids[i], NULL);
 	}
@@ -127,8 +126,7 @@ void finish_eating(BabyThreadData* baby_data, int index) {
 		if ((baby_data->data->food[index] == false) && (refill_count >= baby_data->data->max_refill_count)) {
 			pthread_mutex_unlock(&baby_data->data->mutex);
 			sem_post(&baby_data->data->foodpot[index]);
-			pct_markthread_done();
-			pthread_exit(0);
+			return;
 		} else {
 			pthread_mutex_unlock(&baby_data->data->mutex);
 		}
@@ -166,6 +164,5 @@ void* baby_thread(void* arg) {
 		finish_eating(baby_data, index);
 	}
 
-	pct_markthread_done();
 	return NULL;
 }

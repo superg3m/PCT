@@ -28,7 +28,6 @@ void* worker(void*) {
         pthread_mutex_unlock(&mutex);
     }
 
-    pct_markthread_done();
     return NULL;
 }
 

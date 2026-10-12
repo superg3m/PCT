@@ -29,6 +29,5 @@ void* thread_worker_sort(void* args) {
         swapped = true;
     }
 
-    pct_markthread_done();
     return (void*)swapped;
 }
