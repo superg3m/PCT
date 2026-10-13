@@ -2082,7 +2082,14 @@
     void MACRO_RUNTIME_ASSERT(bool expression, const char* function, const char* file, int line) {
         if (!expression) {                             
             //stack_trace_dump(function, file, line);                               
-            char msg[] = "Func: %s, File: %s:%d\n";          
+            char msg[] = "Func: %s, File: %s:%d\n";      
+            
+            const char* file_without_the_slashes = file;
+            s64 last_index = str_last_index_of(file, str_length(file), STRING_LIT_ARG("./"));
+            if (last_index != -1) {
+                file_without_the_slashes += last_index + 2;
+            }
+
             LOG_FATAL(msg, function, file, line);
             CRASH();
         }                                                         
@@ -2108,10 +2115,16 @@
 
             u64 message_length = message_size - 1;
 
+            const char* file_without_the_slashes = file;
+            s64 last_index = str_last_index_of(file, str_length(file), STRING_LIT_ARG("./"));
+            if (last_index != -1) {
+                file_without_the_slashes += last_index + 2;
+            }
+
             // stack_trace_dump(function, file, line);
             LOG_FATAL("%.*s", message_length, message);                                 
             char func_file_msg[] = "Func: %s, File: %s:%d\n";          
-            LOG_FATAL(func_file_msg, function, file, line);
+            LOG_FATAL(func_file_msg, function, file_without_the_slashes, line);
 
             CRASH();                                                
         }                                                                                    

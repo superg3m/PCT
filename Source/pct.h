@@ -36,12 +36,12 @@ basically I want the thread id to uniquely map to an array slot (I could use my 
         void pct_shutdown();
         int pct_get_thread_priority();
         int pct_pthread_create(pthread_t* thread_id, const pthread_attr_t* attribute, void*(*func)(void*), void* arg);
-        int pct_pthread_mutex_lock(pthread_mutex_t* mutex);
-        int pct_pthread_mutex_unlock(pthread_mutex_t* mutex);
+        int pct_pthread_mutex_lock(pthread_mutex_t* mutex, const char* function, const char* file, int line);
+        int pct_pthread_mutex_unlock(pthread_mutex_t* mutex, const char* function, const char* file, int line);
         int pct_sem_init(sem_t* s, int pshared, unsigned int value);
-        int pct_sem_wait(sem_t* s);
-        int pct_sem_post(sem_t* s);
-        int pct_pthread_join(pthread_t thread, void** ret);
+        int pct_sem_wait(sem_t* s, const char* function, const char* file, int line);
+        int pct_sem_post(sem_t* s, const char* function, const char* file, int line);
+        int pct_pthread_join(pthread_t thread, void** ret, const char* function, const char* file, int line);
     #ifdef __cplusplus
     }
     #endif
@@ -52,13 +52,13 @@ basically I want the thread id to uniquely map to an array slot (I could use my 
 
         #define sem_init(s, pshared, value) pct_sem_init(s, pshared, value)
         #define pthread_create(thread_id, attribute, func, arg) pct_pthread_create(thread_id, attribute, func, arg)
-        #define pthread_mutex_lock(_mutex) pct_pthread_mutex_lock((_mutex))
-        #define pthread_mutex_unlock(_mutex) pct_pthread_mutex_unlock((_mutex))
+        #define pthread_mutex_lock(_mutex) pct_pthread_mutex_lock((_mutex),  __func__, __FILE__, __LINE__)
+        #define pthread_mutex_unlock(_mutex) pct_pthread_mutex_unlock((_mutex),  __func__, __FILE__, __LINE__)
 
-        #define sem_wait(s) pct_sem_wait(s)
-        #define sem_post(s) pct_sem_post(s)
+        #define sem_wait(s) pct_sem_wait(s,  __func__, __FILE__, __LINE__)
+        #define sem_post(s) pct_sem_post(s,  __func__, __FILE__, __LINE__)
 
-        #define pthread_join(thread, ret) pct_pthread_join(thread, ret)
+        #define pthread_join(thread, ret) pct_pthread_join(thread, ret,  __func__, __FILE__, __LINE__)
     #else
         #if defined(__APPLE__) || defined(__MACH__)
             #define sem_wait(s) dispatch_semaphore_wait(*(s), DISPATCH_TIME_FOREVER)

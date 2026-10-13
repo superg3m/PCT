@@ -245,11 +245,11 @@ ThreadContext* pct_pick_next() {
     return next_to_schedule;
 }
 
-void pct_pass_the_torch() {
+void pct_pass_the_torch(const char* function, const char* file, int line) {
     pct_step();
     ThreadContext* next = pct_pick_next();
     if (!next) {
-        RUNTIME_ASSERT_MSG(false, "REPORT_DEADLOCK\n");
+        MACRO_RUNTIME_ASSERT_MSG(false, function, file, line, "REPORT_DEADLOCK\n");
     }
 
     next->generation += 1;
@@ -275,25 +275,25 @@ void pct_markthread_done() {
 }
 
 
-int pct_pthread_mutex_lock(pthread_mutex_t* mutex) {
+int pct_pthread_mutex_lock(pthread_mutex_t* mutex, const char* function, const char* file, int line) {
     if (PCT_DISABLE) return pthread_mutex_lock(mutex);
     self->wait_type = MUTEX;
     self->waiting_on = (void*)mutex;
 
     pct_step();
     while (hashmap_has(&pct_mutex_owner, (void*)mutex) && hashmap_get(&pct_mutex_owner, (void*)mutex) != nullptr) {
-        pct_pass_the_torch();
+        pct_pass_the_torch(function, file, line);
     }
 
     hashmap_put(&pct_mutex_owner, (void*)mutex, self);
     return pthread_mutex_lock(mutex);
 }
 
-int pct_pthread_mutex_unlock(pthread_mutex_t* mutex) {
+int pct_pthread_mutex_unlock(pthread_mutex_t* mutex, const char* function, const char* file, int line) {
     if (PCT_DISABLE) return pthread_mutex_unlock(mutex);
 
     pct_step();
-    pct_pass_the_torch();
+    pct_pass_the_torch(function, file, line);
 
     ThreadContext* owner = hashmap_get(&pct_mutex_owner, (void*)mutex);
     RUNTIME_ASSERT_MSG(self == owner, "Tried to unlock a mutex that I did not own!\n");
@@ -307,7 +307,7 @@ int pct_pthread_mutex_unlock(pthread_mutex_t* mutex) {
 }
 
 // TODO(Jovanni):
-int pct_sem_wait(sem_t* s) {
+int pct_sem_wait(sem_t* s, const char* function, const char* file, int line) {
     if (PCT_DISABLE) return sem_wait(s);
     self->wait_type = SEMAPHORE;
     self->waiting_on = (void*)s;
@@ -315,19 +315,19 @@ int pct_sem_wait(sem_t* s) {
     RUNTIME_ASSERT_MSG(hashmap_has(&pct_sem_count, (void*)s), "Using an non-initalized semaphore\n");
 
     pct_step();
-    pct_pass_the_torch();
+    pct_pass_the_torch(function, file, line);
 
     unsigned int value = hashmap_get(&pct_sem_count, (void*)s);
     hashmap_put(&pct_sem_count, (void*)s, value - 1);
     return sem_wait(s);
 }
 
-int pct_sem_post(sem_t* s) {
+int pct_sem_post(sem_t* s, const char* function, const char* file, int line) {
     if (PCT_DISABLE) return sem_wait(s);
     RUNTIME_ASSERT_MSG(hashmap_has(&pct_sem_count, (void*)s), "Using an non-initalized semaphore\n");
 
     pct_step();
-    pct_pass_the_torch();
+    pct_pass_the_torch(function, file, line);
 
     int ret = sem_post(s);
     self->wait_type = NONE;
@@ -337,7 +337,7 @@ int pct_sem_post(sem_t* s) {
     return ret;
 }
 
-int pct_pthread_join(pthread_t thread, void** ret) {
+int pct_pthread_join(pthread_t thread, void** ret, const char* function, const char* file, int line) {
     if (PCT_DISABLE) return pthread_join(thread, ret);
     ThreadContext* waiting_on = hashmap_get(&pct_thread_map, PThreadKey(thread));
     self->wait_type = JOIN;
@@ -345,7 +345,7 @@ int pct_pthread_join(pthread_t thread, void** ret) {
 
     pct_step();
     while (!waiting_on->finished) {
-        pct_pass_the_torch();
+        pct_pass_the_torch(function, file, line);
     }
 
     int result = pthread_join(thread, ret);
