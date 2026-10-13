@@ -77,7 +77,7 @@ static bool pct_thead_is_safely_runnable(ThreadContext* thread) {
             }
 
             ThreadContext* owner = hashmap_get(&pct_mutex_owner, thread->waiting_on);
-            return owner == thread;
+            return owner == nullptr || owner == thread;
         } break;
 
         case SEMAPHORE: {
@@ -201,6 +201,13 @@ void* pct_thread_entrypoint(void* arg) {
 void pct_step() {
     pct_step_counter += 1;
 
+    
+    // TODO(Jovanni): For not this will just be a random event
+    if (self->priority == pct_step_counter) {
+        self->priority = random_range(1, 1000);
+        pct_step_counter = 0;
+    }
+
     for (int i = 0; i < PCT_MAX_THREAD_COUNT; i++) {
         /*
         if (pct_step_counter == pct_priority_modify_points[i]) {
@@ -274,7 +281,7 @@ int pct_pthread_mutex_lock(pthread_mutex_t* mutex) {
     self->waiting_on = (void*)mutex;
 
     pct_step();
-    while (hashmap_has(&pct_mutex_owner, (void*)mutex)) {
+    while (hashmap_has(&pct_mutex_owner, (void*)mutex) && hashmap_get(&pct_mutex_owner, (void*)mutex) != nullptr) {
         pct_pass_the_torch();
     }
 
@@ -292,7 +299,7 @@ int pct_pthread_mutex_unlock(pthread_mutex_t* mutex) {
     RUNTIME_ASSERT_MSG(self == owner, "Tried to unlock a mutex that I did not own!\n");
 
     int ret = pthread_mutex_unlock(mutex);
-    hashmap_remove(&pct_mutex_owner, (void*)mutex);
+    hashmap_put(&pct_mutex_owner, (void*)mutex, (ThreadContext*)nullptr);
     self->wait_type = NONE;
     self->waiting_on = nullptr;
 
