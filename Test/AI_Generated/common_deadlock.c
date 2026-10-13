@@ -1,9 +1,5 @@
 // 01_common_deadlock.cpp
 
-// NOTE(Jovanni): Interestingly this can no longer deadlock if I wait for all threads to be waiting
-// However because you can adjust the pct config you can get different behavior which is neat.
-
-
 #include "../../Source/pct.h"
 #include <stdio.h>
 
