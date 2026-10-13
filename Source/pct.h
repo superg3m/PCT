@@ -17,7 +17,8 @@ basically I want the thread id to uniquely map to an array slot (I could use my 
 #if defined(__APPLE__) || defined(__MACH__)
     #include <dispatch/dispatch.h>
     #define sem_t dispatch_semaphore_t
-    #define sem_init(s, pshared, value) (*(s) = dispatch_semaphore_create(value), (int)(*(s) != NULL))
+
+    // TODO(Jovanni): Make this be tracked in the pct_sem_count map
     #define sem_destroy(s) dispatch_release(*(s))
 #else
     #include <semaphore.h>
@@ -37,6 +38,7 @@ basically I want the thread id to uniquely map to an array slot (I could use my 
         int pct_pthread_create(pthread_t* thread_id, const pthread_attr_t* attribute, void*(*func)(void*), void* arg);
         int pct_pthread_mutex_lock(pthread_mutex_t* mutex);
         int pct_pthread_mutex_unlock(pthread_mutex_t* mutex);
+        int pct_sem_init(sem_t* s, int pshared, unsigned int value);
         int pct_sem_wait(sem_t* s);
         int pct_sem_post(sem_t* s);
         int pct_pthread_join(pthread_t thread, void** ret);
@@ -47,7 +49,8 @@ basically I want the thread id to uniquely map to an array slot (I could use my 
 
 #if !defined(PCT_BOOTSTRAP)
     #if !defined(PCT_DISABLE)
-    
+
+        #define sem_init(s, pshared, value) pct_sem_init(s, pshared, value)
         #define pthread_create(thread_id, attribute, func, arg) pct_pthread_create(thread_id, attribute, func, arg)
         #define pthread_mutex_lock(_mutex) pct_pthread_mutex_lock((_mutex))
         #define pthread_mutex_unlock(_mutex) pct_pthread_mutex_unlock((_mutex))

@@ -9,6 +9,7 @@
  
 
 #if defined(__APPLE__) || defined(__MACH__)
+    #define sem_init(s, pshared, value) (*(s) = dispatch_semaphore_create(value), (int)(*(s) != NULL))
     #define sem_wait(s) dispatch_semaphore_wait(*(s), DISPATCH_TIME_FOREVER)
     #define sem_post(s) dispatch_semaphore_signal(*(s))
 #endif
@@ -62,24 +63,29 @@ u64 pct_active_threads = 0;
 thread_local ThreadContext* self = nullptr;
 Hashmap<PThreadKey, ThreadContext*> pct_thread_map = {};
 Hashmap<void*, ThreadContext*> pct_mutex_owner = {};  // mutex -> holder
-Hashmap<void*, int>            pct_sem_count   = {};  // sem   -> modeled count
+Hashmap<void*, unsigned int>            pct_sem_count   = {};  // sem   -> modeled count
 
-static bool pct_thead_is_safely_runnable(ThreadContext* t) {
-    switch (t->wait_type) {
+static bool pct_thead_is_safely_runnable(ThreadContext* thread) {
+    switch (thread->wait_type) {
         case NONE: {
             return true;
         } break;
 
         case MUTEX: {
-            return !hashmap_has(&pct_mutex_owner, t->waiting_on) || t->waiting_on == self;
+            if (!hashmap_has(&pct_mutex_owner, thread->waiting_on)) {
+                return true;
+            }
+
+            ThreadContext* owner = hashmap_get(&pct_mutex_owner, thread->waiting_on);
+            return owner == thread;
         } break;
 
         case SEMAPHORE: {
-            return hashmap_get(&pct_sem_count, t->waiting_on) > 0;
+            return hashmap_get(&pct_sem_count, thread->waiting_on) > 0;
         } break;
 
         case JOIN:  {
-            return ((ThreadContext*)t->waiting_on)->finished;
+            return ((ThreadContext*)thread->waiting_on)->finished;
         } break;
     }
 
@@ -119,6 +125,8 @@ void pct_init() {
 
     // NOTE(Jovanni): Hashmap has a capacity of PCT_MAX_THREAD_COUNT * 4 so I can not have to worry about reallocations
     pct_thread_map = hashmap_create<PThreadKey, ThreadContext*>(allocator, PCT_MAX_THREAD_COUNT * 4);
+    pct_mutex_owner = hashmap_create<void*, ThreadContext*>(allocator);
+    pct_sem_count = hashmap_create<void*, unsigned int>(allocator);
 
     Error err = Error::SUCCESS;
     size_t file_size = 0;
@@ -142,6 +150,7 @@ void pct_init() {
     pthread_t main_thread = pthread_self();
     hashmap_put(&pct_thread_map, PThreadKey(main_thread), ctx);
     pthread_mutex_init(&pct_mutex, NULL);
+    self = ctx;
 }
 
 void pct_shutdown() {
@@ -177,7 +186,8 @@ int pct_get_thread_priority() {
 
 void* pct_thread_entrypoint(void* arg) {
     FunctionArgument* f = (FunctionArgument*)arg;
-    sem_wait(&f->ctx->semaphore);
+    self = f->ctx;
+    sem_wait(&self->semaphore);
     // NOTE(Jovanni): VERY IMPORTANT
     // I'm 99% sure you can guarentee everyhting past this point is essencially single threaded
     // meaning you don't have to use locks
@@ -207,14 +217,13 @@ ThreadContext* pct_pick_next() {
         ThreadContext* value = e.value;
         if (value->finished || !pct_thead_is_safely_runnable(value)) continue;
 
-        bool generation_is_less = value->generation < next_to_schedule->generation;
-        bool generation_is_equal = value->generation == next_to_schedule->generation;
-        bool priority_is_higher = !PCT_RANDOM_PRIORITY ? value->priority > next_to_schedule->priority : true; 
-
         if (!next_to_schedule) {
             next_to_schedule = value;
         }
 
+        bool generation_is_less = value->generation < next_to_schedule->generation;
+        bool generation_is_equal = value->generation == next_to_schedule->generation;
+        bool priority_is_higher = !PCT_RANDOM_PRIORITY ? value->priority > next_to_schedule->priority : true; 
         if (PCT_GENERATION) {
             if (generation_is_less || generation_is_equal && priority_is_higher) {
                 next_to_schedule = value;
@@ -229,7 +238,7 @@ ThreadContext* pct_pick_next() {
     return next_to_schedule;
 }
 
-void pct_yield_control() {
+void pct_pass_the_torch() {
     pct_step();
     ThreadContext* next = pct_pick_next();
     if (!next) {
@@ -246,6 +255,10 @@ void pct_markthread_done() {
     self->finished = true;
     pct_active_threads--;
 
+    for (HashmapEntry<void*, ThreadContext*>& e : pct_mutex_owner) {
+        RUNTIME_ASSERT_MSG(e.value != self, "Thread exited holding a lock");
+    }
+
     ThreadContext* next = pct_pick_next();
     if (next) {
         sem_post(&next->semaphore);
@@ -259,10 +272,10 @@ int pct_pthread_mutex_lock(pthread_mutex_t* mutex) {
     if (PCT_DISABLE) return pthread_mutex_lock(mutex);
     self->wait_type = MUTEX;
     self->waiting_on = (void*)mutex;
+
     pct_step();
-    
-    if (hashmap_has(&pct_mutex_owner, (void*)mutex)) {
-        pct_yield_control();
+    while (hashmap_has(&pct_mutex_owner, (void*)mutex)) {
+        pct_pass_the_torch();
     }
 
     hashmap_put(&pct_mutex_owner, (void*)mutex, self);
@@ -271,46 +284,51 @@ int pct_pthread_mutex_lock(pthread_mutex_t* mutex) {
 
 int pct_pthread_mutex_unlock(pthread_mutex_t* mutex) {
     if (PCT_DISABLE) return pthread_mutex_unlock(mutex);
-    self->wait_type = MUTEX;
-    self->waiting_on = (void*)mutex;
+
     pct_step();
-    pct_yield_control();
+    pct_pass_the_torch();
 
     ThreadContext* owner = hashmap_get(&pct_mutex_owner, (void*)mutex);
     RUNTIME_ASSERT_MSG(self == owner, "Tried to unlock a mutex that I did not own!\n");
+
     int ret = pthread_mutex_unlock(mutex);
     hashmap_remove(&pct_mutex_owner, (void*)mutex);
+    self->wait_type = NONE;
+    self->waiting_on = nullptr;
 
     return ret;
 }
 
-/*
 // TODO(Jovanni):
 int pct_sem_wait(sem_t* s) {
     if (PCT_DISABLE) return sem_wait(s);
+    self->wait_type = SEMAPHORE;
+    self->waiting_on = (void*)s;
+
+    RUNTIME_ASSERT_MSG(hashmap_has(&pct_sem_count, (void*)s), "Using an non-initalized semaphore\n");
 
     pct_step();
-    pct_wait_for_scheduler();
+    pct_pass_the_torch();
 
-    ThreadContext* self = pct_get_self();
-    self->waiting_on = (void*)s;
-    hashmap_put(&pct_owner, (void*)s, self);
+    unsigned int value = hashmap_get(&pct_sem_count, (void*)s);
+    hashmap_put(&pct_sem_count, (void*)s, value - 1);
     return sem_wait(s);
 }
 
 int pct_sem_post(sem_t* s) {
-    if (PCT_DISABLE) return sem_post(s);
-
-    if (hashmap_has(&pct_owner, (void*)s)) {
-        hashmap_remove(&pct_owner, (void*)s);
-    }
+    if (PCT_DISABLE) return sem_wait(s);
+    RUNTIME_ASSERT_MSG(hashmap_has(&pct_sem_count, (void*)s), "Using an non-initalized semaphore\n");
 
     pct_step();
-    pct_wait_for_scheduler();
+    pct_pass_the_torch();
 
-    return sem_post(s);
+    int ret = sem_post(s);
+    self->wait_type = NONE;
+    self->waiting_on = nullptr;
+    unsigned int value = hashmap_get(&pct_sem_count, (void*)s);
+    hashmap_put(&pct_sem_count, (void*)s, value + 1);
+    return ret;
 }
-*/
 
 int pct_pthread_join(pthread_t thread, void** ret) {
     if (PCT_DISABLE) return pthread_join(thread, ret);
@@ -320,12 +338,19 @@ int pct_pthread_join(pthread_t thread, void** ret) {
 
     pct_step();
     while (!waiting_on->finished) {
-        pct_yield_control();
+        pct_pass_the_torch();
     }
 
-    self->wait_type = NONE;
     int result = pthread_join(thread, ret);
     hashmap_remove(&pct_thread_map, PThreadKey(thread));
     sem_destroy(&waiting_on->semaphore);
+
+    self->wait_type = NONE;
+    self->waiting_on = nullptr;
     return result;
+}
+
+int pct_sem_init(sem_t* s, int pshared, unsigned int value) {
+    hashmap_put(&pct_sem_count, (void*)s, value);
+    return sem_init(s, pshared, value);
 }

@@ -25,7 +25,7 @@ pc: ProjectConfig = ProjectConfig(
     project_name = "pct",
     project_dependencies = [],
     project_debug_with_visual_studio = True,
-    project_executable_names = ["print_thread.exe"] #  "prog4.exe 8 1 12" ["branch_deadlock.exe"]
+    project_executable_names = ["print_thread.exe", "prog4.exe 8 15 12"] #["branch_deadlock.exe"]
 )
 
 if IS_WINDOWS() and not C_BUILD_IS_DEPENDENCY():
