@@ -1,5 +1,5 @@
 {
-    "PCT_DISABLE": false,
+    "PCT_DISABLE": true,
     "PCT_GENERATION": false,
     "PCT_RANDOM_PRIORITY": false
 }

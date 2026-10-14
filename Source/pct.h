@@ -24,7 +24,7 @@ basically I want the thread id to uniquely map to an array slot (I could use my 
     #include <semaphore.h>
 #endif
 
-#if defined(PCT_DISABLE)
+#if defined(PCT_COMPILE_TIME_DISABLE)
     #define pct_init()
     #define pct_shutdown()
     #define pct_get_thread_priority() 0
@@ -48,8 +48,7 @@ basically I want the thread id to uniquely map to an array slot (I could use my 
 #endif
 
 #if !defined(PCT_BOOTSTRAP)
-    #if !defined(PCT_DISABLE)
-
+    #if !defined(PCT_COMPILE_TIME_DISABLE)
         #define sem_init(s, pshared, value) pct_sem_init(s, pshared, value)
         #define pthread_create(thread_id, attribute, func, arg) pct_pthread_create(thread_id, attribute, func, arg)
         #define pthread_mutex_lock(_mutex) pct_pthread_mutex_lock((_mutex),  __func__, __FILE__, __LINE__)
@@ -61,6 +60,7 @@ basically I want the thread id to uniquely map to an array slot (I could use my 
         #define pthread_join(thread, ret) pct_pthread_join(thread, ret,  __func__, __FILE__, __LINE__)
     #else
         #if defined(__APPLE__) || defined(__MACH__)
+            #define sem_init(s, pshared, value) (*(s) = dispatch_semaphore_create(value), (int)(*(s) != NULL))
             #define sem_wait(s) dispatch_semaphore_wait(*(s), DISPATCH_TIME_FOREVER)
             #define sem_post(s) dispatch_semaphore_signal(*(s))
         #endif

@@ -6,9 +6,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <assert.h>
-// #include <pthread.h>
 
-// #define PCT_DISABLE
+// #define PCT_COMPILE_TIME_DISABLE
 #include "../../Source/pct.h"
 
 extern pthread_mutex_t write_mutex;

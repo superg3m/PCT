@@ -123,11 +123,6 @@ void pct_init() {
     arena = ARENA_CREATE_FIXED(program_memory, ALLOCATION_SIZE);
     Allocator allocator = arena_to_allocator(&arena);
 
-    // NOTE(Jovanni): Hashmap has a capacity of PCT_MAX_THREAD_COUNT * 4 so I can not have to worry about reallocations
-    pct_thread_map = hashmap_create<PThreadKey, ThreadContext*>(allocator, PCT_MAX_THREAD_COUNT * 4);
-    pct_mutex_owner = hashmap_create<void*, ThreadContext*>(allocator);
-    pct_sem_count = hashmap_create<void*, unsigned int>(allocator);
-
     Error err = Error::SUCCESS;
     size_t file_size = 0;
     u8* data = platform_read_entire_file(allocator, "../../../../pct.json", file_size, err);
@@ -141,10 +136,14 @@ void pct_init() {
     PCT_DISABLE = root->get<bool>("PCT_DISABLE");
     PCT_GENERATION = root->get<bool>("PCT_GENERATION");
     PCT_RANDOM_PRIORITY = root->get<bool>("PCT_RANDOM_PRIORITY");
-
     if (PCT_DISABLE) {
         return;
     }
+
+    // NOTE(Jovanni): Hashmap has a capacity of PCT_MAX_THREAD_COUNT * 4 so I can not have to worry about reallocations
+    pct_thread_map = hashmap_create<PThreadKey, ThreadContext*>(allocator, PCT_MAX_THREAD_COUNT * 4);
+    pct_mutex_owner = hashmap_create<void*, ThreadContext*>(allocator);
+    pct_sem_count = hashmap_create<void*, unsigned int>(allocator);
 
     ThreadContext* ctx = pct_allocate_thread_context();
     pthread_t main_thread = pthread_self();
@@ -164,6 +163,7 @@ void pct_shutdown() {
 
 int pct_pthread_create(pthread_t* thread_id, const pthread_attr_t* attr, void*(*func)(void*), void* arg) {
     if (PCT_DISABLE) return pthread_create(thread_id, NULL, func, arg);
+
     RUNTIME_ASSERT_MSG(pct_active_threads < PCT_MAX_THREAD_COUNT, "MAX_THREAD_COUNT: %d has been exceeded\n", PCT_MAX_THREAD_COUNT);
 
     // TODO(Jovanni): use the arena allocator here so I can just free the arena
@@ -201,7 +201,6 @@ void* pct_thread_entrypoint(void* arg) {
 void pct_step() {
     pct_step_counter += 1;
 
-    
     // TODO(Jovanni): For not this will just be a random event
     if (self->priority == pct_step_counter) {
         self->priority = random_range(1, 1000);
@@ -259,6 +258,7 @@ void pct_pass_the_torch(const char* function, const char* file, int line) {
 
 void pct_markthread_done() {
     if (PCT_DISABLE) return;
+
     self->finished = true;
     pct_active_threads--;
 
@@ -273,7 +273,6 @@ void pct_markthread_done() {
         RUNTIME_ASSERT_MSG(false, "REPORT_DEADLOCK\n");
     }
 }
-
 
 int pct_pthread_mutex_lock(pthread_mutex_t* mutex, const char* function, const char* file, int line) {
     if (PCT_DISABLE) return pthread_mutex_lock(mutex);
@@ -309,11 +308,10 @@ int pct_pthread_mutex_unlock(pthread_mutex_t* mutex, const char* function, const
 // TODO(Jovanni):
 int pct_sem_wait(sem_t* s, const char* function, const char* file, int line) {
     if (PCT_DISABLE) return sem_wait(s);
-    self->wait_type = SEMAPHORE;
-    self->waiting_on = (void*)s;
-
     RUNTIME_ASSERT_MSG(hashmap_has(&pct_sem_count, (void*)s), "Using an non-initalized semaphore\n");
 
+    self->wait_type = SEMAPHORE;
+    self->waiting_on = (void*)s;
     pct_step();
     pct_pass_the_torch(function, file, line);
 
@@ -323,7 +321,7 @@ int pct_sem_wait(sem_t* s, const char* function, const char* file, int line) {
 }
 
 int pct_sem_post(sem_t* s, const char* function, const char* file, int line) {
-    if (PCT_DISABLE) return sem_wait(s);
+    if (PCT_DISABLE) return sem_post(s);
     RUNTIME_ASSERT_MSG(hashmap_has(&pct_sem_count, (void*)s), "Using an non-initalized semaphore\n");
 
     pct_step();
@@ -339,6 +337,7 @@ int pct_sem_post(sem_t* s, const char* function, const char* file, int line) {
 
 int pct_pthread_join(pthread_t thread, void** ret, const char* function, const char* file, int line) {
     if (PCT_DISABLE) return pthread_join(thread, ret);
+
     ThreadContext* waiting_on = hashmap_get(&pct_thread_map, PThreadKey(thread));
     self->wait_type = JOIN;
     self->waiting_on = waiting_on;
@@ -358,6 +357,8 @@ int pct_pthread_join(pthread_t thread, void** ret, const char* function, const c
 }
 
 int pct_sem_init(sem_t* s, int pshared, unsigned int value) {
+    if (PCT_DISABLE) return sem_init(s, pshared, value);
+
     hashmap_put(&pct_sem_count, (void*)s, value);
     return sem_init(s, pshared, value);
 }
