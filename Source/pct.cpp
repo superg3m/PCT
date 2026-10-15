@@ -2,11 +2,12 @@
 #include "pct.h"
 #include "core.hpp"
 
+// STEP COUNTER STUFF Priority switching, paper
+
 // TODO(Jovanni):
 // mutex_init and sem_init needs to be tracked
 // so I can just say mutex_owner[mutext]
 // and I can track the count including inital count
- 
 
 #if defined(__APPLE__) || defined(__MACH__)
     #define sem_init(s, pshared, value) (*(s) = dispatch_semaphore_create(value), (int)(*(s) != NULL))
