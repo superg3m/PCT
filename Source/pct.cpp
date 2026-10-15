@@ -62,8 +62,8 @@ u64 pct_active_threads = 0;
 #define PCT_MAX_THREAD_COUNT 1024
 thread_local ThreadContext* self = nullptr;
 Hashmap<PThreadKey, ThreadContext*> pct_thread_map = {};
-Hashmap<void*, ThreadContext*> pct_mutex_owner = {};  // mutex -> holder
-Hashmap<void*, unsigned int>            pct_sem_count   = {};  // sem   -> modeled count
+Hashmap<void*, ThreadContext*> pct_mutex_owner = {};
+Hashmap<void*, unsigned int>  pct_sem_count = {};
 
 static bool pct_thead_is_safely_runnable(ThreadContext* thread) {
     switch (thread->wait_type) {
