@@ -65,6 +65,7 @@ thread_local ThreadContext* self = nullptr;
 Hashmap<PThreadKey, ThreadContext*> pct_thread_map = {};
 Hashmap<void*, ThreadContext*> pct_mutex_owner = {};
 Hashmap<void*, unsigned int>  pct_sem_count = {};
+int* pct_change_points = nullptr;
 
 static bool pct_thead_is_safely_runnable(ThreadContext* thread) {
     switch (thread->wait_type) {
@@ -96,6 +97,8 @@ static bool pct_thead_is_safely_runnable(ThreadContext* thread) {
 bool PCT_DISABLE = false;
 bool PCT_GENERATION = false;
 bool PCT_RANDOM_PRIORITY = false;
+int  PCT_DEPTH = 0;
+int  PCT_K = 0;
 
 int random_range(int min, int max) {
     return (rand() % (max - min + 1)) + min;
@@ -105,9 +108,12 @@ int random_range(int min, int max) {
 // hashmap reallocations
 ThreadContext* pct_allocate_thread_context() {
     ThreadContext* ctx = (ThreadContext*)arena_push(&arena, sizeof(ThreadContext));
+    ctx->wait_type = NONE;
+    ctx->waiting_on = nullptr;
     ctx->finished = false;
     ctx->generation = 0; 
-    ctx->priority = random_range(1, 1000);
+    ctx->priority = random_range(1, PCT_K);
+    // ctx->priority = PCT_DEPTH + next_unique_random_rank();
     sem_init(&ctx->semaphore, 0, 0);
 
     return ctx;
@@ -135,16 +141,26 @@ void pct_init() {
     // TODO(Jovanni): Just do some basics checks so that if the json is malformed it doesn't assert and crash
     JSON* root = JSON::Parse(allocator, (char*)data, file_size);
     PCT_DISABLE = root->get<bool>("PCT_DISABLE");
-    PCT_GENERATION = root->get<bool>("PCT_GENERATION");
-    PCT_RANDOM_PRIORITY = root->get<bool>("PCT_RANDOM_PRIORITY");
     if (PCT_DISABLE) {
+        free(program_memory);
         return;
     }
+    
+    PCT_GENERATION      = root->get<bool>("PCT_GENERATION");
+    PCT_RANDOM_PRIORITY = root->get<bool>("PCT_RANDOM_PRIORITY");
+    PCT_DEPTH           = root->get<int>("PCT_DEPTH");
+    PCT_K               = root->get<int>("PCT_K");
+    RUNTIME_ASSERT_MSG(PCT_DEPTH >= 1, "PCT_DEPTH must be >= 1\n");
+    RUNTIME_ASSERT_MSG(PCT_K >= PCT_DEPTH, "PCT_K must be >= PCT_DEPTH\n");
 
     // NOTE(Jovanni): Hashmap has a capacity of PCT_MAX_THREAD_COUNT * 4 so I can not have to worry about reallocations
     pct_thread_map = hashmap_create<PThreadKey, ThreadContext*>(allocator, PCT_MAX_THREAD_COUNT * 4);
     pct_mutex_owner = hashmap_create<void*, ThreadContext*>(allocator);
     pct_sem_count = hashmap_create<void*, unsigned int>(allocator);
+    pct_change_points = (int*)arena_push(&arena, sizeof(int) * PCT_DEPTH);
+    for (int i = 0; i < PCT_DEPTH; i++) {
+        pct_change_points[i] = random_range(1, PCT_K);
+    }
 
     ThreadContext* ctx = pct_allocate_thread_context();
     pthread_t main_thread = pthread_self();
@@ -202,20 +218,12 @@ void* pct_thread_entrypoint(void* arg) {
 void pct_step() {
     pct_step_counter += 1;
 
-    // TODO(Jovanni): For not this will just be a random event
-    if (self->priority == pct_step_counter) {
-        self->priority = random_range(1, 1000);
-        pct_step_counter = 0;
+    for (int i = 0; i < PCT_DEPTH - 1; i++) {
+        if (pct_step_counter == (u64)pct_change_points[i]) {
+            self->priority = i + 1;
+        }
     }
 
-    for (int i = 0; i < PCT_MAX_THREAD_COUNT; i++) {
-        /*
-        if (pct_step_counter == pct_priority_modify_points[i]) {
-            self->priority = ???; // TODO(Jovanni): I need to reread the paper how they change prio
-            pct_wait_for_scheduler(self);
-        }
-        */
-    }
 }
 
 ThreadContext* pct_pick_next() {
@@ -277,10 +285,11 @@ void pct_markthread_done() {
 
 int pct_pthread_mutex_lock(pthread_mutex_t* mutex, const char* function, const char* file, int line) {
     if (PCT_DISABLE) return pthread_mutex_lock(mutex);
+    MACRO_RUNTIME_ASSERT_MSG(self->waiting_on != mutex, function, file, line, "A thread tried to lock mutex it owns!\n");
+    
+    pct_step();
     self->wait_type = MUTEX;
     self->waiting_on = (void*)mutex;
-
-    pct_step();
     while (hashmap_has(&pct_mutex_owner, (void*)mutex) && hashmap_get(&pct_mutex_owner, (void*)mutex) != nullptr) {
         pct_pass_the_torch(function, file, line);
     }
@@ -315,7 +324,9 @@ int pct_sem_wait(sem_t* s, const char* function, const char* file, int line) {
     self->waiting_on = (void*)s;
     pct_step();
     pct_pass_the_torch(function, file, line);
-
+    self->wait_type = NONE;
+    self->waiting_on = nullptr;
+    
     unsigned int value = hashmap_get(&pct_sem_count, (void*)s);
     hashmap_put(&pct_sem_count, (void*)s, value - 1);
     return sem_wait(s);
@@ -329,8 +340,6 @@ int pct_sem_post(sem_t* s, const char* function, const char* file, int line) {
     pct_pass_the_torch(function, file, line);
 
     int ret = sem_post(s);
-    self->wait_type = NONE;
-    self->waiting_on = nullptr;
     unsigned int value = hashmap_get(&pct_sem_count, (void*)s);
     hashmap_put(&pct_sem_count, (void*)s, value + 1);
     return ret;
