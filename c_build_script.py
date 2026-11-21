@@ -34,7 +34,7 @@ pc: ProjectConfig = ProjectConfig(
 )
 
 if IS_WINDOWS() and not C_BUILD_IS_DEPENDENCY():
-    cc.compiler_name = "cl"
+    cc.compiler_name = "g++"
 elif IS_DARWIN() and not C_BUILD_IS_DEPENDENCY():
     cc.compiler_name = "clang++"
 elif IS_LINUX() and not C_BUILD_IS_DEPENDENCY():
@@ -45,20 +45,24 @@ if cc.compiler_name == "cl":
     cc.compiler_warning_level = "3"
     cc.compiler_disable_specific_warnings = ["5105", "4668", "4820", "4996"]
 else:
-    cc.compiler_warning_level = "all"
+    cc.compiler_warning_level = ""
     cc.compiler_disable_specific_warnings = [
         "deprecated", "parentheses", "unused-variable",
-        "int-to-void-pointer-cast", "void-pointer-to-int-cast",
-        "reserved-user-defined-literal", "unused-but-set-variable"
+        #"int-to-void-pointer-cast", "void-pointer-to-int-cast",
+        #"reserved-user-defined-literal", 
+        "unused-but-set-variable"
     ]
 
 build_postfix = f"build_{cc.compiler_name}/{C_BUILD_BUILD_TYPE()}"
 executable_procedure_libs = [f"../../../../{build_postfix}/PCT.lib"]
 if IS_WINDOWS():
-    windows_libs = [GET_LIB_FLAG(cc, "User32"), GET_LIB_FLAG(cc, "Gdi32")]
+    windows_libs = [
+        GET_LIB_FLAG(cc, "User32"), GET_LIB_FLAG(cc, "Gdi32"),
+        GET_LIB_FLAG(cc, "Winmm"), GET_LIB_FLAG(cc, "stdc++")
+    ]
     executable_procedure_libs += windows_libs
 
-inject = ["-O0"]
+inject = ["-O0", GET_LIB_FLAG(cc, "stdc++"), GET_LIB_FLAG(cc, "m")]
 
 procedures: Dict[str, ProcedureConfig] = {
     "pct library": ProcedureConfig(
@@ -98,7 +102,7 @@ procedures: Dict[str, ProcedureConfig] = {
         output_name="prog4.exe",
         source_files=["../../*.c"],
         additional_libs=executable_procedure_libs,
-        compiler_inject_into_args=["-O0"]
+        compiler_inject_into_args=inject
     ),
 
     "branch_deadlock": ProcedureConfig(
@@ -106,7 +110,7 @@ procedures: Dict[str, ProcedureConfig] = {
         output_name="branch_deadlock.exe",
         source_files=["../../branch_deadlock.c"],
         additional_libs=executable_procedure_libs,
-        compiler_inject_into_args=["-O0"]
+        compiler_inject_into_args=inject
     ),
 
     "nested_deadlock": ProcedureConfig(
@@ -114,7 +118,7 @@ procedures: Dict[str, ProcedureConfig] = {
         output_name="nested_deadlock.exe",
         source_files=["../../nested_deadlock.c"],
         additional_libs=executable_procedure_libs,
-        compiler_inject_into_args=["-O0"]
+        compiler_inject_into_args=inject
     ),
 
     "rare_deadlock": ProcedureConfig(
@@ -122,7 +126,7 @@ procedures: Dict[str, ProcedureConfig] = {
         output_name="common_deadlock.exe",
         source_files=["../../common_deadlock.c"],
         additional_libs=executable_procedure_libs,
-        compiler_inject_into_args=["-O0"]
+        compiler_inject_into_args=inject
     ),
 }
 

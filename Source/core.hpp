@@ -74,9 +74,9 @@
 
     // --
 
-    typedef void* (AllocateFunction)(void* ctx, size_t allocation_size);
-    typedef void* (ReallocFunction)(void* ctx, void* data, size_t old_allocation_size, size_t new_allocation_size);
-    typedef void  (FreeFunction)(void* ctx, void* data);
+    typedef void* (AllocateFunction)(const void* ctx, size_t allocation_size);
+    typedef void* (ReallocFunction)(const void* ctx, void* data, size_t old_allocation_size, size_t new_allocation_size);
+    typedef void  (FreeFunction)(const void* ctx, void* data);
 
     struct Allocator {
         void* ctx;
@@ -385,7 +385,7 @@
 #endif
 
 #if defined(CORE_MATH)
-    #include <math.h>
+    #include <cmath>
 
     constexpr float PI = 3.14159265359f;
     constexpr float TAU = PI * 2;
@@ -398,7 +398,7 @@
     #undef NEAR_ZERO
     #undef NEAR_EQUAL
 
-    #define SQUARED(a) ((a) * (a))
+    #define SQUARED(a) ((float)((a) * (a)))
     #define DEGREES_TO_RAD(degrees) ((degrees)*(PI/180.0f))
     #define RAD_TO_DEGREES(rad) ((rad)*(180.0f/PI))
     #define NEAR_ZERO(x) (fabs(x) <= EPSILON)
@@ -560,47 +560,13 @@
         bool operator!=(const Vec4 &right) const;
     };
 
-    struct IVec4 {
-        union {
-            struct {
-                int x;
-                int y;
-                int z;
-                int w;
-            };
-        };
-
-        float magnitude() const;
-        float magnitude_squared() const;
-        IVec4 normalize() const;
-        IVec4 scale(int scale) const;
-        IVec4 scale(int scale_x, int scale_y, int scale_z, int scale_w) const;
-        IVec4 scale(IVec4 s) const;
-
-        IVec4 operator+(const IVec4 &right) const;
-        IVec4& operator+=(const IVec4 &right);
-        IVec4 operator-(const IVec4 &right) const;
-        IVec4& operator-=(const IVec4 &right);
-
-        IVec4 operator*(const IVec4 &right) const;
-        IVec4& operator*=(const IVec4 &right);
-
-        IVec4 operator/(const IVec4 &right) const;
-        IVec4& operator/=(const IVec4 &right);
-
-        bool operator==(const IVec4 &right) const;
-        bool operator!=(const IVec4 &right) const;
-    };
-
     Vec2 vec2_create(float fill);
     Vec3 vec3_create(float fill);
     Vec4 vec4_create(float fill);
-    IVec4 ivec4_create(int fill);
 
     Vec2 vec2_create(float x, float y);
     Vec3 vec3_create(float x, float y, float z);
     Vec4 vec4_create(float x, float y, float z, float w);
-    IVec4 ivec4_create(int x, int y, int z, int w);
 
     Vec3 vec3_create(Vec4 v);
     Vec3 vec3_create(Vec2 v, float z);
@@ -619,32 +585,26 @@
     float vec2_dot(Vec2 a, Vec2 b);
     float vec3_dot(Vec3 a, Vec3 b);
     float vec4_dot(Vec4 a, Vec4 b);
-    float ivec4_dot(IVec4 a, IVec4 b);
 
     Vec2 vec2_lerp(Vec2 a, Vec2 b, float t);
     Vec3 vec3_lerp(Vec3 a, Vec3 b, float t);
     Vec4 vec4_lerp(Vec4 a, Vec4 b, float t);
-    IVec4 ivec4_lerp(IVec4 a, IVec4 b, float t);
 
     float vec2_distance(Vec2 a, Vec2 b);
     float vec3_distance(Vec3 a, Vec3 b);
     float vec4_distance(Vec4 a, Vec4 b);
-    float ivec4_distance(IVec4 a, IVec4 b);
 
     float vec2_distance_squared(Vec2 a, Vec2 b);
     float vec3_distance_squared(Vec3 a, Vec3 b);
     float vec4_distance_squared(Vec4 a, Vec4 b);
-    float ivec4_distance_squared(IVec4 a, IVec4 b);
 
     Vec2 vec2_move_toward(Vec2 a, Vec2 b, float dt);
     Vec3 vec3_move_toward(Vec3 a, Vec3 b, float dt);
     Vec4 vec4_move_toward(Vec4 a, Vec4 b, float dt);
-    IVec4 ivec4_move_toward(IVec4 a, IVec4 b, float dt);
 
     Vec2 vec2_closest(Vec2 a, Vec2 b, Vec2 target = vec2_create(0));
     Vec3 vec3_closest(Vec3 a, Vec3 b, Vec3 target = vec3_create(0));
     Vec4 vec4_closest(Vec4 a, Vec4 b, Vec4 target = vec4_create(0));
-    IVec4 ivec4_closest(IVec4 a, IVec4 b, IVec4 target = ivec4_create(0));
 
     Vec2 vec2_euler(float yaw, float pitch);
     Vec3 vec3_euler(float yaw, float pitch);
@@ -747,8 +707,8 @@
 #endif
 
 #if defined(CORE_RANDOM)
-    constexpr u32 STATE_VECTOR_LENGTH = 624;
-    constexpr u32 STATE_VECTOR_M      = 397;
+    constexpr s32 STATE_VECTOR_LENGTH = 624;
+    constexpr s32 STATE_VECTOR_M      = 397;
 
     struct Seed {
         u32 mt[STATE_VECTOR_LENGTH];
@@ -1413,10 +1373,10 @@
     };
 
     Arena arena_create(void* memory, size_t allocation_size, int flags, u8 alignment);
-    void* arena_push(void* arena_ctx, size_t allocation_size);
+    void* arena_push(const void* arena_ctx, size_t allocation_size);
     void arena_pop(Arena* arena, size_t to_pop);
-    void arena_free(void* arena_ctx, void* data);
-    void* arena_realloc(void* arena_ctx, void* data, size_t old_allocation_size, size_t new_allocation_size);
+    void arena_free(const void* arena_ctx, void* data);
+    void* arena_realloc(const void* arena_ctx, void* data, size_t old_allocation_size, size_t new_allocation_size);
     Allocator arena_to_allocator(Arena* arena);
 
     void arena_begin_temp(Arena* arena);
@@ -1554,7 +1514,7 @@
     typedef void DLL;
 
     struct FileTime {
-        #if PLATFORM_WINDOWS
+        #if defined(PLATFORM_WINDOWS)
             FILETIME time;
         #else
             time_t time;
@@ -1671,7 +1631,7 @@
                                          \
         X(TS_PRIMITIVE_STRING, "string") \
         
-    enum TokenType {
+    enum CoreTokenType {
         TOKEN_ILLEGAL_TOKEN,
         TOKEN_EOF,
         
@@ -1697,7 +1657,7 @@
     };
 
     struct Token {
-        TokenType type;
+        CoreTokenType type;
         u32 line;
         View<char> sv; // used for identifer names, string literals, the source_view
 
@@ -1712,10 +1672,10 @@
     };
 
     const char* token_to_string(Token token);
-    const char* token_to_string(TokenType type);
+    const char* token_to_string(CoreTokenType type);
 
     Token token_invalid();
-    Token token_create(TokenType token_type, View<char> sv, int line);
+    Token token_create(CoreTokenType token_type, View<char> sv, int line);
 
     Token token_keyword_from_source_view(View<char> sv, int line);
     Token token_syntax_from_source_view(View<char> sv, int line);
@@ -1779,8 +1739,8 @@
     Parser parser_create(Allocator allocator, Vector<Token>* in_tokens);
 
     Token parser_consume_next_token(Parser* parser);
-    Token parser_expect(Parser* parser, TokenType expected_type);
-    bool parser_consume_on_match(Parser* parser, TokenType expected_type);
+    Token parser_expect(Parser* parser, CoreTokenType expected_type);
+    bool parser_consume_on_match(Parser* parser, CoreTokenType expected_type);
 
     // --
 
@@ -1860,7 +1820,7 @@
             RUNTIME_ASSERT(this->has(key));
 
             u64 index = hashmap_get(&this->object.keys, key);
-            JSON* value = this->object.pairs[index].value;
+            JSON* value = this->object.pairs[(int)index].value;
 
             const char* error_msg = "Error JSON.Get(%s) | Expected type %s, but got %s\n";
             if constexpr (std::is_same_v<T, int>) {
@@ -1914,13 +1874,13 @@
         template<SupportedType T>
         constexpr JSON* MAKE_JSON_VALUE(Allocator allocator, T value) {
             if constexpr (std::is_same_v<T, int>) {
-                return JSON::Integer(allocator, value);
+                return JSON::Integer(allocator, (int)value);
             } else if constexpr (std::is_same_v<T, float>) {
-                return JSON::Floating(allocator, value);
+                return JSON::Floating(allocator, (float)value);
             } else if constexpr (std::is_same_v<T, double>) {
-                return JSON::Floating(allocator, value);
+                return JSON::Floating(allocator, (float)value);
             } else if constexpr (std::is_same_v<T, bool>) {
-                return JSON::Boolean(allocator, value);
+                return JSON::Boolean(allocator, (bool)value);
             } else if constexpr (std::is_same_v<T, char*> || std::is_same_v<T, const char*>) {
                 return JSON::String(allocator, value);
             } else if constexpr (std::is_same_v<T, View<char>>) {
@@ -1984,17 +1944,17 @@
         return ERROR_STRINGS[(int)error_code];
     }
 
-    INTERNAL_FUNCTION void* memory_general_allocate(void* ctx, size_t allocation_size) {
+    INTERNAL_FUNCTION void* memory_general_allocate(const void* ctx, size_t allocation_size) {
         UNUSED(ctx);
         return std::malloc(allocation_size);
     }
 
-    INTERNAL_FUNCTION void* memory_general_realloc(void* ctx, void* data, size_t old_allocation_size, size_t new_allocation_size) {
+    INTERNAL_FUNCTION void* memory_general_realloc(const void* ctx, void* data, size_t old_allocation_size, size_t new_allocation_size) {
         UNUSED(ctx);
         return std::realloc(data, new_allocation_size);
     }
 
-    INTERNAL_FUNCTION void memory_general_free(void* ctx, void* data) {
+    INTERNAL_FUNCTION void memory_general_free(const void* ctx, void* data) {
         UNUSED(ctx);
         std::free(data);
     }
@@ -2230,7 +2190,7 @@
             u8* str_ptr = (u8*)str;
             int c;
 
-            for (int i = 0; i < str_length; i++) {
+            for (size_t i = 0; i < str_length; i++) {
                 c = str_ptr[i];
                 hash = ((hash << 5) + hash) + c;
             }
@@ -2651,7 +2611,7 @@
     }
 
     float random_generate_range(Seed* r, float min, float max) {
-        float value = random_generate_u32(r);
+        float value = (float)random_generate_u32(r);
         return remap(value, 0, 1, min, max);
     }
 #endif
@@ -2708,7 +2668,7 @@
     }
 
     float Vec2::magnitude() const {
-        return sqrtf((this->x * this->x) + (this->y * this->y));
+        return std::sqrt((this->x * this->x) + (this->y * this->y));
     }
 
     float Vec2::magnitude_squared() const {
@@ -2809,7 +2769,7 @@
     }
 
     float vec2_distance(Vec2 a, Vec2 b) {
-        return sqrtf(SQUARED(b.x - a.x) + SQUARED(b.y - a.y));
+        return std::sqrt(SQUARED(b.x - a.x) + SQUARED(b.y - a.y));
     }
 
     float vec2_distance_squared(Vec2 a, Vec2 b) {
@@ -2837,8 +2797,8 @@
 
     Vec2 vec2_euler(float yaw, float pitch) {
         Vec2 ret = vec2_create(0, 0);
-        ret.x = cosf(DEGREES_TO_RAD(yaw)) * cosf(DEGREES_TO_RAD(pitch));
-        ret.y = sinf(DEGREES_TO_RAD(pitch));
+        ret.x = std::cos(DEGREES_TO_RAD(yaw)) * std::cos(DEGREES_TO_RAD(pitch));
+        ret.y = std::sin(DEGREES_TO_RAD(pitch));
 
         return ret;
     }
@@ -2882,7 +2842,7 @@
     }
 
     float Vec3::magnitude() const {
-        return sqrtf(SQUARED(this->x) + SQUARED(this->y) + SQUARED(this->z));
+        return std::sqrt(SQUARED(this->x) + SQUARED(this->y) + SQUARED(this->z));
     }
 
     float Vec3::magnitude_squared() const {
@@ -2978,7 +2938,7 @@
     }
 
     float vec3_distance(Vec3 a, Vec3 b) {
-        return sqrtf(SQUARED(b.x - a.x) + SQUARED(b.y - a.y) - SQUARED(b.z - a.z));
+        return std::sqrt(SQUARED(b.x - a.x) + SQUARED(b.y - a.y) - SQUARED(b.z - a.z));
     }
 
     float vec3_distance_squared(Vec3 a, Vec3 b) {
@@ -2998,9 +2958,9 @@
 
     Vec3 vec3_euler(float yaw, float pitch) {
         Vec3 ret = vec3_create(0, 0, 0);
-        ret.x = cosf(DEGREES_TO_RAD(yaw)) * cosf(DEGREES_TO_RAD(pitch));
-        ret.y = sinf(DEGREES_TO_RAD(pitch));
-        ret.z = sinf(DEGREES_TO_RAD(yaw)) * cosf(DEGREES_TO_RAD(pitch));
+        ret.x = std::cos(DEGREES_TO_RAD(yaw)) * std::cos(DEGREES_TO_RAD(pitch));
+        ret.y = std::sin(DEGREES_TO_RAD(pitch));
+        ret.z = std::sin(DEGREES_TO_RAD(yaw)) * std::cos(DEGREES_TO_RAD(pitch));
 
         return ret;
     }
@@ -3056,7 +3016,7 @@
     }
 
     float Vec4::magnitude() const {
-        return sqrtf(SQUARED(this->x) + SQUARED(this->y) + SQUARED(this->z) + SQUARED(this->w));
+        return std::sqrt(SQUARED(this->x) + SQUARED(this->y) + SQUARED(this->z) + SQUARED(this->w));
     }
 
     float Vec4::magnitude_squared() const {
@@ -3155,7 +3115,7 @@
     }
 
     float vec4_distance(Vec4 a, Vec4 b) {
-        return sqrtf(SQUARED(b.x - a.x) + SQUARED(b.y - a.y) - SQUARED(b.z - a.z) - SQUARED(b.w - a.w));
+        return std::sqrt(SQUARED(b.x - a.x) + SQUARED(b.y - a.y) - SQUARED(b.z - a.z) - SQUARED(b.w - a.w));
     }
 
     float vec4_distance_squared(Vec4 a, Vec4 b) {
@@ -3181,147 +3141,6 @@
         ret.w = move_toward(a.w, b.w, dt);
         
         return ret;
-    }
-
-    // ---
-
-    IVec4 ivec4_create(int fill) {
-        IVec4 ret = {};
-        ret.x = fill;
-        ret.y = fill;
-        ret.z = fill;
-        ret.w = fill;
-
-        return ret;
-    }
-
-    IVec4 ivec4_create(int x, int y, int z, int w) {
-        IVec4 ret = {};
-        ret.x = x;
-        ret.y = y;
-        ret.z = z;
-        ret.w = w;
-
-        return ret;
-    }
-
-    float IVec4::magnitude() const {
-        return sqrtf(SQUARED(this->x) + SQUARED(this->y) + SQUARED(this->z) + SQUARED(this->w));
-    }
-
-    float IVec4::magnitude_squared() const {
-        return SQUARED(this->x) + SQUARED(this->y) + SQUARED(this->z) + SQUARED(this->w);
-    }
-
-    IVec4 IVec4::normalize() const {
-        const float magnitude = this->magnitude();
-        if (magnitude == 0) {
-            return ivec4_create(0);
-        }
-
-        IVec4 ret = ivec4_create(0);
-        ret.x = this->x / magnitude;
-        ret.y = this->y / magnitude;
-        ret.z = this->z / magnitude;
-        ret.w = this->w / magnitude;
-
-        return ret;
-    }
-
-    IVec4 IVec4::scale(int scale) const {
-        return ivec4_create(this->x * scale, this->y * scale, this->z * scale, this->w * scale);
-    }
-
-    IVec4 IVec4::scale(IVec4 s) const {
-        return ivec4_create(this->x * s.x, this->y * s.y, this->z * s.z, this->w * s.w);
-    }
-
-    IVec4 IVec4::scale(int scale_x, int scale_y, int scale_z, int scale_w) const {
-        return ivec4_create(this->x * scale_x, this->y * scale_y, this->z * scale_z, this->w * scale_w);
-    }
-
-    IVec4 IVec4::operator+(const IVec4 &right) const {
-        return ivec4_create(this->x + right.x, this->y + right.y, this->z + right.z, this->w + right.w);
-    }
-    IVec4& IVec4::operator+=(const IVec4 &right) {
-        this->x += right.x;
-        this->y += right.y;
-        this->z += right.z;
-        this->w += right.w;
-
-        return *this;
-    }
-
-    IVec4 IVec4::operator-(const IVec4 &right) const {
-        return ivec4_create(this->x - right.x, this->y - right.y, this->z - right.z, this->w - right.w);
-    }
-    IVec4& IVec4::operator-=(const IVec4 &right) {
-        this->x -= right.x;
-        this->y -= right.y;
-        this->z -= right.z;
-        this->w -= right.w;
-
-        return *this;
-    }
-
-
-    IVec4 IVec4::operator*(const IVec4 &right) const {
-        return ivec4_create(this->x * right.x, this->y * right.y, this->z * right.z, this->w * right.w);
-    }
-    IVec4& IVec4::operator*=(const IVec4 &right) {
-        this->x *= right.x;
-        this->y *= right.y;
-        this->z *= right.z;
-        this->w *= right.w;
-
-        return *this;
-    }
-
-    IVec4 IVec4::operator/(const IVec4 &right) const {
-        return ivec4_create(this->x / right.x, this->y / right.y, this->z / right.z, this->w / right.w);
-    }
-    IVec4& IVec4::operator/=(const IVec4 &right) {
-        this->x /= right.x;
-        this->y /= right.y;
-        this->z /= right.z;
-        this->w /= right.w;
-
-        return *this;
-    }
-
-    bool IVec4::operator==(const IVec4 &right) const {
-        return NEAR_ZERO(this->x - right.x) && NEAR_ZERO(this->y - right.y) && NEAR_ZERO(this->z - right.z) && NEAR_ZERO(this->w - right.w);
-    }
-    bool IVec4::operator!=(const IVec4 &right) const {
-        return !(*this == right);
-    }
-
-    float ivec4_dot(IVec4 a, IVec4 b) {
-        return (a.x * b.x) + (a.y * b.y) + (a.z * b.z) + (a.w * b.w);
-    }
-
-    IVec4 ivec4_lerp(IVec4 a, IVec4 b, float t) {
-        IVec4 ab = (b - a);
-        return a + (ab.scale(t));
-    }
-
-    float ivec4_distance(IVec4 a, IVec4 b) {
-        return sqrtf(SQUARED(b.x - a.x) + SQUARED(b.y - a.y) - SQUARED(b.z - a.z) - SQUARED(b.w - a.w));
-    }
-
-    float ivec4_distance_squared(IVec4 a, IVec4 b) {
-        return SQUARED(b.x - a.x) + SQUARED(b.y - a.y) - SQUARED(b.z - a.z) - SQUARED(b.w - a.w);
-    }
-
-    IVec4 ivec4_closest(IVec4 a, IVec4 b, IVec4 target) {
-        float a_distance = ivec4_distance_squared(a, target);
-        float b_distance = ivec4_distance_squared(b, target);
-
-        if (a_distance <= b_distance) {
-            return a;
-        }
-
-        return b;
     }
 
     // --
@@ -3403,8 +3222,8 @@
 
     Mat4 mat4_rotate(Mat4 mat, float theta, Vec3 axis) {
         float rad = DEGREES_TO_RAD(theta);
-        float c = cosf(rad);
-        float s = sinf(rad);
+        float c = std::cos(rad);
+        float s = std::sin(rad);
         float t = 1.0f - c;
 
         axis = axis.normalize();
@@ -3536,7 +3355,7 @@
     Mat4 mat4_perspective(float fov_degrees, float aspect, float near_plane, float far_plane) {
         float fov_radians = DEGREES_TO_RAD(fov_degrees);
 
-        const float t = tanf(fov_radians / 2) * near_plane;
+        const float t = std::tan(fov_radians / 2) * near_plane;
         const float b = -t;
         const float r = t * aspect;
         const float l = -t * aspect;
@@ -3829,12 +3648,12 @@
         Quat ret;
 
         float radians = DEGREES_TO_RAD(theta);
-        ret.w = cosf(radians / 2.0f);
+        ret.w = std::cos(radians / 2.0f);
         if (NEAR_ZERO(ret.w)) {
             ret.w = 0.0f;
         }
 
-        ret.v = axis.normalize().scale(sinf(radians / 2.0f));
+        ret.v = axis.normalize().scale(std::sin(radians / 2.0f));
         return ret;
     }
 
@@ -3928,7 +3747,7 @@
 
         // Clamp w to [-1, 1] to avoid NaNs due to precision issues
         float w = CLAMP(quat.w, -1.0f, 1.0f);
-        theta = 2.0f * acosf(w);
+        theta = 2.0f * std::acos(w);
         theta = RAD_TO_DEGREES(theta);
     }
 
@@ -3999,12 +3818,12 @@
         float pitch_rad_half = DEGREES_TO_RAD(euler_angles_degrees.y) * 0.5f;
         float yaw_rad_half = DEGREES_TO_RAD(euler_angles_degrees.z) * 0.5f;
 
-        float cx = cosf(roll_rad_half);
-        float sx = sinf(roll_rad_half);
-        float cy = cosf(pitch_rad_half);
-        float sy = sinf(pitch_rad_half);
-        float cz = cosf(yaw_rad_half);
-        float sz = sinf(yaw_rad_half);
+        float cx = std::cos(roll_rad_half);
+        float sx = std::sin(roll_rad_half);
+        float cy = std::cos(pitch_rad_half);
+        float sy = std::sin(pitch_rad_half);
+        float cz = std::cos(yaw_rad_half);
+        float sz = std::sin(yaw_rad_half);
 
         Quat q = quat_identity();
         q.w = cx * cy * cz + sx * sy * sz;
@@ -4017,8 +3836,8 @@
 
     Quat quat_from_angle_axis(float angle, Vec3 axis) {
         float half_angle = DEGREES_TO_RAD(angle) * 0.5f;
-        float sinf_half = sinf(half_angle);
-        float cosf_half = cosf(half_angle);
+        float sinf_half = std::sin(half_angle);
+        float cosf_half = std::cos(half_angle);
 
         Quat q = quat_identity();
         axis = axis.normalize();
@@ -4069,7 +3888,7 @@
             }
         }
         
-        float s = 0.5f / sqrtf(t);
+        float s = 0.5f / std::sqrt(t);
         q.v.x *= s;
         q.v.y *= s;
         q.v.z *= s;
@@ -4097,14 +3916,14 @@
             return lerp.normalize();
         }
 
-        float theta_0 = acosf(dot);
+        float theta_0 = std::acos(dot);
         float theta = theta_0 * t;
 
         Quat q3 = r - q.scale(dot);
         q3 = q3.normalize();
 
-        Quat term1 = q.scale(cosf(theta));
-        Quat term2 = q3.scale(sinf(theta));
+        Quat term1 = q.scale(std::cos(theta));
+        Quat term2 = q3.scale(std::sin(theta));
 
         return term1 + term2;
     }
@@ -4144,7 +3963,7 @@
         return ret;
     }
 
-    void* arena_push(void* arena_ctx, size_t allocation_size) {
+    void* arena_push(const void* arena_ctx, size_t allocation_size) {
         Arena* arena = (Arena*)arena_ctx;
         RUNTIME_ASSERT_MSG(arena->base_address, "Allocator is invalid!\n");
         RUNTIME_ASSERT_MSG(allocation_size != 0, "Element size can't be zero!\n");
@@ -4180,7 +3999,7 @@
     }
 
 
-    void arena_free(void* arena_ctx, void* data) {
+    void arena_free(const void* arena_ctx, void* data) {
         Arena* arena = (Arena*)arena_ctx;
         RUNTIME_ASSERT(data);
 
@@ -4189,7 +4008,7 @@
         }
     }
 
-    void* arena_realloc(void* arena_ctx, void* data, size_t old_allocation_size, size_t new_allocation_size) {
+    void* arena_realloc(const void* arena_ctx, void* data, size_t old_allocation_size, size_t new_allocation_size) {
         Arena* arena = (Arena*)arena_ctx;
         RUNTIME_ASSERT(arena);
         RUNTIME_ASSERT(old_allocation_size != 0);
@@ -4420,7 +4239,7 @@
             UNUSED(ctx);
             void* ret = VirtualAlloc(nullptr, new_allocation_size, MEM_COMMIT, PAGE_READWRITE);
             memory_copy(ret, new_allocation_size, data, old_allocation_size);
-            win32_free(data);
+            win32_free(ctx, data);
 
             return ret;
         }
@@ -4618,7 +4437,7 @@
         LOG_TRACE("%s(%.*s) | line: %d\n", token_to_string(this->type), (int)this->sv.length, this->sv.data, this->line);
     }
 
-    const char* token_to_string(TokenType type) {
+    const char* token_to_string(CoreTokenType type) {
         static const char* token_strings[] = {
             STRINGIFY(TOKEN_ILLEGAL_TOKEN),
             STRINGIFY(TOKEN_EOF),
@@ -4659,7 +4478,7 @@
         return t;
     }
 
-    Token token_create(TokenType token_type, View<char> sv, int line) {
+    Token token_create(CoreTokenType token_type, View<char> sv, int line) {
         Token t = {};
         t.type = token_type;
         t.sv = sv;
@@ -4669,8 +4488,8 @@
     }
 
     Token token_keyword_from_source_view(View<char> sv, int line) {
-        static Hashmap<View<char>, TokenType> keyword_map = hashmap_create<View<char>, TokenType>(allocator_general(), {
-            #define X(name, str) KeyValuePair<View<char>, TokenType>{ view_create<char>(str, sizeof(str) - 1), name },
+        static Hashmap<View<char>, CoreTokenType> keyword_map = hashmap_create<View<char>, CoreTokenType>(allocator_general(), {
+            #define X(name, str) KeyValuePair<View<char>, CoreTokenType>{ view_create<char>(str, sizeof(str) - 1), name },
                 X_KEYWORD_TOKENS
             #undef X
         });
@@ -4692,8 +4511,8 @@
     }
 
     Token token_syntax_from_source_view(View<char> sv, int line) {
-        static Hashmap<View<char>, TokenType> syntax_map = hashmap_create<View<char>, TokenType>(allocator_general(), {
-            #define X(name, str) KeyValuePair<View<char>, TokenType>{ view_create<char>(str, sizeof(str) - 1), name },
+        static Hashmap<View<char>, CoreTokenType> syntax_map = hashmap_create<View<char>, CoreTokenType>(allocator_general(), {
+            #define X(name, str) KeyValuePair<View<char>, CoreTokenType>{ view_create<char>(str, sizeof(str) - 1), name },
                 X_SYNTAX_TOKENS
             #undef X
         });
@@ -4753,8 +4572,8 @@
     }
 
     Token token_primitive_from_source_view(View<char> sv, int line) {
-        static Hashmap<View<char>, TokenType> primitive_type_map = hashmap_create<View<char>, TokenType>(allocator_general(), {
-            #define X(name, str) KeyValuePair<View<char>, TokenType>{ view_create<char>(str, sizeof(str) - 1), name },
+        static Hashmap<View<char>, CoreTokenType> primitive_type_map = hashmap_create<View<char>, CoreTokenType>(allocator_general(), {
+            #define X(name, str) KeyValuePair<View<char>, CoreTokenType>{ view_create<char>(str, sizeof(str) - 1), name },
                 X_PRIMITIVE_TYPES_TOKENS
             #undef X
         });
@@ -5013,13 +4832,12 @@
         LOG_ERROR("String: %.*s\n", (int)scratch.length, scratch.data); 
 
         LOG_ERROR("Bytes: ");
-        for (int i = 0; i < (int)scratch.length; i++) {
+        for (u64 i = 0; i < scratch.length; i++) {
             if (i == scratch.length - 1) {
                 LOG_TRACE("%d\n", scratch.data[i]);
             } else {
                 LOG_TRACE("%d, ", scratch.data[i]);
             }
-
         }
 
         RUNTIME_ASSERT_MSG(false, "[LEXER ERROR] line: %d | %s", this->line, msg);
@@ -5049,7 +4867,7 @@
     }
 
     Token Parser::peek_nth_token(int n) const {
-        if (this->current + n >= this->tokens->count) {
+        if (this->current + n >= (int)this->tokens->count) {
             return token_invalid(); // invalid
         }
 
@@ -5079,7 +4897,7 @@
     // TODO(Jovanni): This is actually really fuckign misleading because if
     // you expect some token type and you don't get it you report the error but have
     // no real way to know if you failed this check
-    Token parser_expect(Parser* parser, TokenType expected_type) {
+    Token parser_expect(Parser* parser, CoreTokenType expected_type) {
         Token got_token = parser->peek_nth_token();
 
         if (got_token.type != expected_type) {
@@ -5091,7 +4909,7 @@
         return parser_consume_next_token(parser);
     }
 
-    bool parser_consume_on_match(Parser* parser, TokenType expected_type) {
+    bool parser_consume_on_match(Parser* parser, CoreTokenType expected_type) {
         if (parser->peek_nth_token().type == expected_type) {
             parser_consume_next_token(parser);
             return true;
@@ -5169,14 +4987,14 @@
             } break;
 
             case JSON_VALUE_OBJECT: {
-                int object_member_count = root->object.pairs.count;
+                u64 object_member_count = root->object.pairs.count;
                 Vector<u64> lengths = vector_create<u64>(root->allocator, object_member_count);
                 const char** buffers = (const char**)std::malloc(sizeof(char*) * object_member_count);
 
                 size_t total_allocation_size = 1; // 1 for the null terminator
                 const char* member_indent = indentFromDepth(depth + 1, indent);
-                for (int i = 0; i < object_member_count; i++) {
-                    KeyValuePair pair = root->object.pairs[i];
+                for (u64 i = 0; i < object_member_count; i++) {
+                    KeyValuePair pair = root->object.pairs[(int)i];
                     u64 temp_length = 0;
 
                     const char* value = toStringHelper(pair.value, indent, depth + 1);

@@ -19,7 +19,7 @@ int main() {
     pct_init();
 
     pthread_mutex_init(&print_mutex, NULL);
-    pthread_t threads[pct_thread_count] = {NULL};
+    pthread_t threads[pct_thread_count];
     for (int i = 0; i < pct_thread_count; i++) {
         pthread_create(&threads[i], NULL, print_thread, NULL);
     }
