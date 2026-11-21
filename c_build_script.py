@@ -49,7 +49,8 @@ else:
     cc.compiler_disable_specific_warnings = [
         "deprecated", "parentheses", "unused-variable",
         #"int-to-void-pointer-cast", "void-pointer-to-int-cast",
-        #"reserved-user-defined-literal", 
+        "reserved-user-defined-literal", 
+        "unused-command-line-argument",
         "unused-but-set-variable"
     ]
 
