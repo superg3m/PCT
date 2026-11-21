@@ -4927,10 +4927,11 @@
 
         size_t allocation_size = str_length(indent) * depth;
         char* ret = (char*)std::malloc(allocation_size + 1);
+        ret[allocation_size] = '\0';
         for (int i = 0; i < allocation_size; i++) {
             ret[i] = ' ';
         }
-
+        
         return ret;
     }
 
@@ -4979,6 +4980,7 @@
                 
                 u64 string_length = 0;
                 char* buffer = (char*)std::malloc(total_allocation_size);
+                buffer[total_allocation_size - 1] = '\0';
                 for (int i = 0; i < array_count; i++) {
                     str_append(buffer, string_length, total_allocation_size, buffers[i], lengths[i]);
                 }
@@ -4991,7 +4993,7 @@
                 Vector<u64> lengths = vector_create<u64>(root->allocator, object_member_count);
                 const char** buffers = (const char**)std::malloc(sizeof(char*) * object_member_count);
 
-                size_t total_allocation_size = 1; // 1 for the null terminator
+                size_t total_allocation_size = 1;  // 1 for the null terminator
                 const char* member_indent = indentFromDepth(depth + 1, indent);
                 for (u64 i = 0; i < object_member_count; i++) {
                     KeyValuePair pair = root->object.pairs[(int)i];
@@ -5010,6 +5012,7 @@
                 
                 u64 string_length = 0;
                 char* buffer = (char*)std::malloc(total_allocation_size);
+                buffer[total_allocation_size - 1] = '\0';
                 for (int i = 0; i < object_member_count; i++) {
                     str_append(buffer, string_length, total_allocation_size, buffers[i], lengths[i]);
                 }
